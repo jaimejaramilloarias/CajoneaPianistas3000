@@ -70,7 +70,7 @@ def aplicar_voicings_a_referencia(
             idx_voicing += 1
             if idx_voicing < len(grupos_corchea):
                 grupo_limite += grupos_corchea[idx_voicing]
-        voicing = voicings[idx_voicing]
+        voicing = sorted(voicings[idx_voicing])
         orden = NOTAS_BASE.index(pos["pitch"])  # position within voicing
         nueva_nota = pretty_midi.Note(
             velocity=100,
@@ -98,11 +98,18 @@ def exportar_montuno(
     grupos_corchea: List[int],
     output_path: Path,
 ) -> None:
-    """Generate a new MIDI file with the given voicings."""
+    """Generate a new MIDI file with the given voicings.
+
+    The resulting notes are trimmed so the output stops after the
+    last eighth-note of the progression.
+    """
     notes, pm = leer_midi_referencia(midi_referencia_path)
     posiciones = obtener_posiciones_referencia(notes)
     _, grid, bpm = _grid_and_bpm(pm)
     nuevas_notas = aplicar_voicings_a_referencia(posiciones, voicings, grupos_corchea, grid)
+
+    limite = sum(grupos_corchea) * grid
+    nuevas_notas = [n for n in nuevas_notas if n.start < limite]
 
     pm_out = pretty_midi.PrettyMIDI(initial_tempo=bpm)
     inst_out = pretty_midi.Instrument(
