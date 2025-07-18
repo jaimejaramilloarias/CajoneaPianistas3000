@@ -288,6 +288,26 @@ def _grid_and_bpm(pm: pretty_midi.PrettyMIDI) -> Tuple[int, float, float]:
     return cor, grid, bpm
 
 
+def _recortar_notas_a_limite(
+    notas: List[pretty_midi.Note], limite: float
+) -> List[pretty_midi.Note]:
+    """Recorta las notas para que no se extiendan más allá de ``limite``.
+
+    Cualquier nota que termine después del instante indicado se acorta para
+    que su atributo ``end`` coincida exactamente con ``limite``.  Las notas
+    cuyo ``start`` es posterior al límite se descartan.
+    """
+
+    recortadas: List[pretty_midi.Note] = []
+    for n in notas:
+        if n.start >= limite:
+            continue
+        if n.end > limite:
+            n.end = limite
+        recortadas.append(n)
+    return recortadas
+
+
 def exportar_montuno(
     midi_referencia_path: Path,
     voicings: List[List[int]],
@@ -318,6 +338,8 @@ def exportar_montuno(
         posiciones_base, total_dest_cor, total_cor_ref, grid
     )
 
+    limite = total_dest_cor * grid
+
     arm = (armonizacion or "").lower()
     if arm in ("terceras", "sextas"):
         salto = 1 if arm == "terceras" else 2
@@ -328,23 +350,26 @@ def exportar_montuno(
         nuevas_notas, _ = aplicar_voicings_a_referencia(
             posiciones, voicings, asignaciones, grid, debug=debug
         )
-        limite_cor = total_dest_cor
-        limite = limite_cor * grid
-        nuevas_notas = [n for n in nuevas_notas if n.start < limite]
 
-        # Añade una nota de duración cero para asegurar la duración total
-        if limite > 0:
-            nuevas_notas.append(
-                pretty_midi.Note(
-                    velocity=1,
-                    pitch=0,
-                    start=max(0.0, limite - grid),
-                    end=limite,
-                )
+    # ------------------------------------------------------------------
+    # Ajuste final de duracion: todas las notas se recortan para que
+    # terminen, como maximo, en la ultima corchea programada.
+    # ------------------------------------------------------------------
+    nuevas_notas = _recortar_notas_a_limite(nuevas_notas, limite)
+
+    # Se añade una nota de duracion cero al final para fijar la longitud
+    if limite > 0:
+        nuevas_notas.append(
+            pretty_midi.Note(
+                velocity=1,
+                pitch=0,
+                start=max(0.0, limite - grid),
+                end=limite,
             )
+        )
 
-        if arm:
-            nuevas_notas = aplicar_armonizacion(nuevas_notas, armonizacion)
+    if arm and arm not in ("terceras", "sextas"):
+        nuevas_notas = aplicar_armonizacion(nuevas_notas, armonizacion)
 
     pm_out = pretty_midi.PrettyMIDI(initial_tempo=bpm)
     inst_out = pretty_midi.Instrument(
