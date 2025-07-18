@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import List, Tuple
 import pretty_midi
+from voicings import parsear_nombre_acorde
 
 # Baseline notes present in the reference MIDI to be replaced by generated voicings
 NOTAS_BASE = [55, 57, 60, 64]  # G3, A3, C4, E4
@@ -256,6 +257,94 @@ def _arm_por_parejas(
     return resultado
 
 
+def _arm_terceras_intervalos(
+    posiciones: List[dict],
+    voicings: List[List[int]],
+    asignaciones: List[Tuple[str, List[int]]],
+    grid_seg: float,
+    *,
+    debug: bool = False,
+) -> List[pretty_midi.Note]:
+    """Generate thirds following different patterns for 7th and 6th chords.
+
+    For each chord the lower voice rotates through the four notes of its
+    voicing.  The upper voice depends on the chord type:
+
+    * Chords with a seventh: ``n1``/``n2+12`` → ``n2``/``n3+12`` →
+      ``n3``/``n4+12`` → ``n4``/``(root+2)+12``.
+    * Chords with a sixth:  ``n1``/``n2+12`` → ``n2``/``n3+12`` →
+      ``n3``/``(root+11)+12`` → ``n4``/``n1+12``.
+
+    The reference velocity and timing are preserved.
+    """
+
+    # Map each eighth to the index of its chord/voicing
+    mapa: dict[int, int] = {}
+    for i, (_, idxs) in enumerate(asignaciones):
+        for ix in idxs:
+            mapa[ix] = i
+
+    # Preprocess chord information so detection happens only once
+    info: list[tuple[int, bool]] = []  # (root pitch class, is_sixth)
+    for nombre, _ in asignaciones:
+        root_pc, suf = parsear_nombre_acorde(nombre)
+        is_sixth = suf.endswith("6") and "7" not in suf
+        info.append((root_pc, is_sixth))
+
+    contadores: dict[int, int] = {}
+    resultado: List[pretty_midi.Note] = []
+
+    for pos in posiciones:
+        corchea = int(round(pos["start"] / grid_seg))
+        if corchea not in mapa:
+            if debug:
+                print(f"Corchea {corchea}: silencio")
+            continue
+
+        idx = mapa[corchea]
+        paso = contadores.get(idx, 0)
+        contadores[idx] = paso + 1
+
+        voicing = sorted(voicings[idx])
+        root_pc, is_sixth = info[idx]
+
+        n1, n2, n3, n4 = voicing
+        root_pitch = root_pc + 60  # root around C4
+
+        if is_sixth:
+            parejas = [
+                (n1, n2 + 12),
+                (n2, n3 + 12),
+                (n3, root_pitch + 11 + 12),
+                (n4, n1 + 12),
+            ]
+        else:
+            parejas = [
+                (n1, n2 + 12),
+                (n2, n3 + 12),
+                (n3, n4 + 12),
+                (n4, root_pitch + 2 + 12),
+            ]
+
+        par = parejas[paso % 4]
+        for p in par:
+            resultado.append(
+                pretty_midi.Note(
+                    velocity=pos["velocity"],
+                    pitch=p,
+                    start=pos["start"],
+                    end=pos["end"],
+                )
+            )
+
+        if debug:
+            print(
+                f"Corchea {corchea}: paso {paso} {asignaciones[idx][0]} -> {par[0]} / {par[1]}"
+            )
+
+    return resultado
+
+
 def _arm_noop(notas: List[pretty_midi.Note]) -> List[pretty_midi.Note]:
     """Placeholder for future harmonization types."""
 
@@ -341,10 +430,13 @@ def exportar_montuno(
     limite = total_dest_cor * grid
 
     arm = (armonizacion or "").lower()
-    if arm in ("terceras", "sextas"):
-        salto = 1 if arm == "terceras" else 2
+    if arm == "terceras":
+        nuevas_notas = _arm_terceras_intervalos(
+            posiciones, voicings, asignaciones, grid, debug=debug
+        )
+    elif arm == "sextas":
         nuevas_notas = _arm_por_parejas(
-            posiciones, voicings, asignaciones, grid, salto, debug=debug
+            posiciones, voicings, asignaciones, grid, 2, debug=debug
         )
     else:
         nuevas_notas, _ = aplicar_voicings_a_referencia(
