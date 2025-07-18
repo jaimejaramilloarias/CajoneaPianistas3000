@@ -17,21 +17,30 @@ def leer_midi_referencia(midi_path: Path):
     pm = pretty_midi.PrettyMIDI(str(midi_path))
     # use the first instrument only
     instrumento = pm.instruments[0]
-    return instrumento.notes, pm
+    # ensure notes are ordered by start time
+    notes = sorted(instrumento.notes, key=lambda n: n.start)
+    for n in notes:
+        nombre = pretty_midi.note_number_to_name(int(n.pitch))
+        print(f"{n.pitch} ({nombre})")
+    print(f"Total de notas: {len(notes)}")
+    return notes, pm
 
 
 def obtener_posiciones_referencia(notes) -> List[dict]:
     """Return pitch/start/end for the baseline notes present in the reference."""
     posiciones = []
     for n in notes:
-        if n.pitch in NOTAS_BASE:
+        pitch = int(n.pitch)
+        if pitch in [int(p) for p in NOTAS_BASE]:
             posiciones.append(
                 {
-                    "pitch": n.pitch,
+                    "pitch": pitch,
                     "start": n.start,
                     "end": n.end,
                 }
             )
+            nombre = pretty_midi.note_number_to_name(pitch)
+            print(f"Nota base {pitch} ({nombre}) inicio {n.start}")
     posiciones.sort(key=lambda x: (x["start"], x["pitch"]))
     print(f"Notas base encontradas: {len(posiciones)}")
     ejemplo = [(p['pitch'], p['start']) for p in posiciones[:10]]
