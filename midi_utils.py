@@ -5,7 +5,7 @@ from typing import List, Tuple
 import pretty_midi
 
 # Baseline notes present in the reference MIDI to be replaced by generated voicings
-NOTAS_BASE = [43, 45, 48, 52]  # G2, A2, C3, E3
+NOTAS_BASE = [55, 57, 60, 64]  # G3, A3, C4, E4
 
 
 # ==========================================================================
