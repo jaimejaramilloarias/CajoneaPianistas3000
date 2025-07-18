@@ -129,72 +129,59 @@ def exportar_montuno(
 # ---------------------------------------------------------------------------
 # Rhythmic pattern configuration
 # ---------------------------------------------------------------------------
-# ``PATRON_INICIAL`` se utiliza para los cuatro primeros grupos de corcheas.
-# A partir de ahí se repite indefinidamente ``PATRON_REPETICION``.  Modificar
-# estas listas permite ajustar fácilmente el feel rítmico sin cambiar el resto
-# del código.
-PATRON_INICIAL: List[int] = [3, 2, 4, 2]
-PATRON_REPETICION: List[int] = [5, 2, 4, 2]
+# ``PATRON_GRUPOS`` contains the sequence of eighth-note group lengths used in the traditional style.
+# The list repeats indefinitely if more values are required.
+PATRON_GRUPOS: List[int] = [
+    3, 2, 4, 2,
+    5, 2, 4, 2,
+    5, 2, 4, 2,
+    5, 2, 4, 2,
+    5, 2, 4, 2,
+    5, 2, 4, 2,
+    5, 2, 4, 2,
+]
 
 
-def _iterar_patron_grupos():
-    """Yield eighth-note group lengths following the defined pattern."""
-    for g in PATRON_INICIAL:
-        yield g
-    while True:
-        for g in PATRON_REPETICION:
-            yield g
+def _siguiente_grupo(indice: int) -> int:
+    """Return the pattern value for the given index."""
+    return PATRON_GRUPOS[indice % len(PATRON_GRUPOS)]
 
 
-def generar_grupos_corchea(cantidad: int) -> List[int]:
-    """Return ``cantidad`` eighth-note groups following the rhythmic pattern."""
-    gen = _iterar_patron_grupos()
-    return [next(gen) for _ in range(cantidad)]
 
+def procesar_progresion_en_grupos(texto: str) -> List[Tuple[str, int]]:
+    """Assign eighth-note groups to each chord in ``texto``.
 
-def procesar_progresion_en_grupos(texto: str) -> Tuple[List[str], List[int]]:
-    """Return chords and their lengths in eighth notes following the pattern.
-
-    ``texto`` may contain bars separated by the ``|`` character.  Within each
-    bar there can be either one chord or two chords separated by whitespace.  A
-    single chord spans **two** consecutive groups from the rhythmic pattern,
-    while two chords share one group each, in the order they appear.
+    ``texto`` may include ``|`` characters to delimit segments.  Each segment
+    can contain either one chord or two chords separated by whitespace.
+    When a single chord is found, it consumes two consecutive values from
+    ``PATRON_GRUPOS`` and the values are summed.  With two chords, each one
+    receives the next pattern value in order.  The pattern repeats if necessary.
+    The function prints the assignment and returns a list of ``(chord, length)``
+    tuples.
     """
 
     texto = " ".join(texto.strip().split())
     segmentos = [s.strip() for s in texto.split("|") if s.strip()]
 
-    acordes: List[str] = []
-    duraciones: List[int] = []
-    grupos_por_acorde: List[List[int]] = []
-    gen = _iterar_patron_grupos()
+    resultado: List[Tuple[str, int]] = []
+    idx = 0
 
     for seg in segmentos:
         ch = [c for c in seg.split() if c]
         if len(ch) == 1:
-            # One chord -> consume two groups of the rhythmic pattern
-            g1 = next(gen)
-            g2 = next(gen)
-            acordes.append(ch[0])
-            duraciones.append(g1 + g2)
-            grupos_por_acorde.append([g1, g2])
+            g1 = _siguiente_grupo(idx); idx += 1
+            g2 = _siguiente_grupo(idx); idx += 1
+            total = g1 + g2
+            resultado.append((ch[0], total))
+            print(f"{ch[0]}: {g1}+{g2}={total} corcheas")
         elif len(ch) == 2:
-            # Two chords -> one group each, sequentially
-            g1 = next(gen)
-            g2 = next(gen)
-            acordes.append(ch[0])
-            duraciones.append(g1)
-            grupos_por_acorde.append([g1])
-            acordes.append(ch[1])
-            duraciones.append(g2)
-            grupos_por_acorde.append([g2])
+            g1 = _siguiente_grupo(idx); idx += 1
+            g2 = _siguiente_grupo(idx); idx += 1
+            resultado.append((ch[0], g1))
+            print(f"{ch[0]}: {g1} corcheas")
+            resultado.append((ch[1], g2))
+            print(f"{ch[1]}: {g2} corcheas")
         else:
             raise ValueError("Se permiten uno o dos acordes entre barras")
 
-    # Muestra en consola el resultado para facilitar la depuración
-    for a, grupos in zip(acordes, grupos_por_acorde):
-        resumen = ",".join(str(g) for g in grupos)
-        total = sum(grupos)
-        print(f"{a}: {resumen} (total {total} corcheas)")
-
-    return acordes, duraciones
+    return resultado
