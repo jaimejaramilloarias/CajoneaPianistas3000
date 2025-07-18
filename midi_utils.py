@@ -104,6 +104,7 @@ def construir_posiciones_desde_ventanas(
 
     # Pre calcula para cada ventana las notas asociadas a cada corchea relativa
     ventanas_por_idx: List[List[List[dict]]] = []
+    dummy_count = 0
     for ventana in ventanas:
         grupos = [[] for _ in range(16)]
         for pos in ventana:
@@ -116,7 +117,25 @@ def construir_posiciones_desde_ventanas(
                         "end": pos["end"] - idx * grid_seg,
                     }
                 )
+
+        for i in range(16):
+            if not grupos[i]:
+                # Nota muda que actúa como marcador de corchea.
+                # Se usa 21 (A0) porque queda fuera del rango de trabajo
+                # y luego se ignorará al aplicar los voicings.
+                grupos[i].append(
+                    {
+                        "pitch": 21,
+                        "start": 0.0,
+                        "end": min(0.01, grid_seg),
+                    }
+                )
+                dummy_count += 1
+
         ventanas_por_idx.append(grupos)
+
+    if debug:
+        print(f"Dummy notes agregadas: {dummy_count}")
 
     posiciones: List[dict] = []
     bloques = (total_corcheas + 15) // 16
@@ -136,6 +155,8 @@ def construir_posiciones_desde_ventanas(
                 break
             notas = grupos[local_idx]
             for nota in notas:
+                if nota["pitch"] == 21:
+                    continue  # placeholder para silencio
                 posiciones.append(
                     {
                         "pitch": nota["pitch"],
