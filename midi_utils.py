@@ -27,7 +27,7 @@ def leer_midi_referencia(midi_path: Path):
 
 
 def obtener_posiciones_referencia(notes) -> List[dict]:
-    """Return pitch/start/end for the baseline notes present in the reference."""
+    """Return pitch, start, end and velocity for baseline notes in the reference."""
     posiciones = []
     for n in notes:
         pitch = int(n.pitch)
@@ -37,6 +37,7 @@ def obtener_posiciones_referencia(notes) -> List[dict]:
                     "pitch": pitch,
                     "start": n.start,
                     "end": n.end,
+                    "velocity": n.velocity,
                 }
             )
             nombre = pretty_midi.note_number_to_name(pitch)
@@ -72,6 +73,7 @@ def construir_posiciones_secuenciales(
                     "pitch": pos["pitch"],
                     "start": pos["start"] - idx * grid_seg,
                     "end": pos["end"] - idx * grid_seg,
+                    "velocity": pos["velocity"],
                 }
             )
 
@@ -84,6 +86,7 @@ def construir_posiciones_secuenciales(
                     "pitch": nota["pitch"],
                     "start": dest_idx * grid_seg + nota["start"],
                     "end": dest_idx * grid_seg + nota["end"],
+                    "velocity": nota["velocity"],
                 }
             )
 
@@ -127,8 +130,9 @@ def aplicar_voicings_a_referencia(
             continue  # silencio
         voicing = sorted(voicings[mapa[corchea]])
         orden = NOTAS_BASE.index(pos["pitch"])  # posición dentro del voicing
+        # Preserve the velocity of the reference note so dynamics match
         nueva_nota = pretty_midi.Note(
-            velocity=100,
+            velocity=pos["velocity"],
             pitch=voicing[orden],
             start=pos["start"],
             end=pos["end"],
@@ -142,35 +146,71 @@ def aplicar_voicings_a_referencia(
     return nuevas_notas, max_idx
 
 
-def aplicar_armonizacion(notas: List[pretty_midi.Note], opcion: str) -> List[pretty_midi.Note]:
-    """Apply the selected harmonization option to the list of notes."""
+def _arm_octavas(notas: List[pretty_midi.Note]) -> List[pretty_midi.Note]:
+    """Duplicate each note one octave above."""
 
     resultado: List[pretty_midi.Note] = []
-    if opcion.lower() == "octavas":
-        # Duplicate each note one octave above
-        for n in notas:
-            resultado.append(n)
-            if n.pitch > 0:
-                resultado.append(
-                    pretty_midi.Note(
-                        velocity=n.velocity,
-                        pitch=n.pitch + 12,
-                        start=n.start,
-                        end=n.end,
-                    )
+    for n in notas:
+        resultado.append(n)
+        if n.pitch > 0:
+            resultado.append(
+                pretty_midi.Note(
+                    velocity=n.velocity,
+                    pitch=n.pitch + 12,
+                    start=n.start,
+                    end=n.end,
                 )
-        return resultado
-    elif opcion.lower() == "doble octava":
-        # TODO: implementar lógica para duplicar dos octavas por encima
-        pass
-    elif opcion.lower() == "terceras":
-        # TODO: implementar duplicación a la tercera
-        pass
-    elif opcion.lower() == "sextas":
-        # TODO: implementar duplicación a la sexta
-        pass
+            )
+    return resultado
+
+
+def _arm_doble_octava(notas: List[pretty_midi.Note]) -> List[pretty_midi.Note]:
+    """Create notes an octave below and above, without keeping the original."""
+
+    resultado: List[pretty_midi.Note] = []
+    for n in notas:
+        if n.pitch > 0:
+            # Copy the velocity from the original note
+            resultado.append(
+                pretty_midi.Note(
+                    velocity=n.velocity,
+                    pitch=n.pitch - 12,
+                    start=n.start,
+                    end=n.end,
+                )
+            )
+            resultado.append(
+                pretty_midi.Note(
+                    velocity=n.velocity,
+                    pitch=n.pitch + 12,
+                    start=n.start,
+                    end=n.end,
+                )
+            )
+    return resultado
+
+
+def _arm_noop(notas: List[pretty_midi.Note]) -> List[pretty_midi.Note]:
+    """Placeholder for future harmonization types."""
 
     return notas
+
+
+_ARMONIZADORES = {
+    "octavas": _arm_octavas,
+    "doble octava": _arm_doble_octava,
+    "terceras": _arm_noop,
+    "sextas": _arm_noop,
+}
+
+
+def aplicar_armonizacion(notas: List[pretty_midi.Note], opcion: str) -> List[pretty_midi.Note]:
+    """Apply the selected harmonization option using ``_ARMONIZADORES``."""
+
+    funcion = _ARMONIZADORES.get(opcion.lower())
+    if funcion is None:
+        return notas
+    return funcion(notas)
 
 
 def _grid_and_bpm(pm: pretty_midi.PrettyMIDI) -> Tuple[int, float, float]:
