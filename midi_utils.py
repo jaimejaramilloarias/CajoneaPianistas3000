@@ -256,25 +256,34 @@ def exportar_montuno(
 # ---------------------------------------------------------------------------
 # Rhythmic pattern configuration
 # ---------------------------------------------------------------------------
-# ``PATRON_GRUPOS`` contiene la secuencia de longitudes de grupos de corcheas
-# utilizada al distribuir los acordes.  Se repetirá indefinidamente si se
-# necesitan más valores.
-PATRON_GRUPOS: List[int] = [
-    4, 3, 4, 3,
-    6, 3, 4, 3,
-    6, 3, 4, 3,
-    6, 3, 4, 3,
-]
+# ``PRIMER_BLOQUE`` y ``PATRON_REPETIDO`` definen el esquema de agrupación de
+# corcheas utilizado por el modo tradicional.  El primer bloque se utiliza tal
+# cual una única vez y a partir de entonces se repite ``PATRON_REPETIDO`` de
+# forma indefinida.  Para cambiar el patrón basta con modificar estas dos
+# listas.
+PRIMER_BLOQUE: List[int] = [3, 4, 4, 3]
+PATRON_REPETIDO: List[int] = [5, 4, 4, 3]
+
+# ``PATRON_GRUPOS`` se mantiene solo como referencia para visualizar los
+# primeros valores calculados con la configuración actual.
+PATRON_GRUPOS: List[int] = PRIMER_BLOQUE + PATRON_REPETIDO * 3
 
 
 def _siguiente_grupo(indice: int) -> int:
-    """Devuelve el valor del patrón correspondiente al índice indicado."""
-    return PATRON_GRUPOS[indice % len(PATRON_GRUPOS)]
+    """Devuelve la longitud del grupo de corcheas según ``indice``.
+
+    Los cuatro primeros valores provienen de ``PRIMER_BLOQUE`` y, a partir de
+    ahí, se repite ``PATRON_REPETIDO`` tantas veces como sea necesario.
+    """
+    if indice < len(PRIMER_BLOQUE):
+        return PRIMER_BLOQUE[indice]
+    indice -= len(PRIMER_BLOQUE)
+    return PATRON_REPETIDO[indice % len(PATRON_REPETIDO)]
 
 
 
 def procesar_progresion_en_grupos(texto: str) -> Tuple[List[Tuple[str, List[int]]], int]:
-    """Asignar corcheas a los acordes usando ``PATRON_GRUPOS``.
+    """Asignar corcheas a los acordes usando ``_siguiente_grupo``.
 
     El texto de la progresión se divide por barras ``|`` en segmentos.  Cada
     segmento puede contener uno o dos acordes.  Si sólo hay un acorde, se le
