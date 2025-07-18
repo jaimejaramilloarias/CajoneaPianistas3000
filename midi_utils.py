@@ -294,6 +294,23 @@ def _arm_terceras_intervalos(
     contadores: dict[int, int] = {}
     resultado: List[pretty_midi.Note] = []
 
+    def _a_decima(grave: int, aguda: int) -> int:
+        """Return ``aguda`` shifted by octaves so ``aguda - grave`` is 15 or 16."""
+
+        diff = aguda - grave
+        if diff in (15, 16):
+            return aguda
+        mod = diff % 12
+        if mod == 3:
+            objetivo = 15
+        elif mod == 4:
+            objetivo = 16
+        else:
+            # If the pair does not form a third, keep the pitch class as is
+            # and leave the interval untouched.
+            return aguda
+        return aguda + (objetivo - diff)
+
     for pos in posiciones:
         corchea = int(round(pos["start"] / grid_seg))
         if corchea not in mapa:
@@ -325,8 +342,13 @@ def _arm_terceras_intervalos(
                 (n3, n4 + 12),
                 (n4, root_pitch + 2 + 12),
             ]
-
-        par = parejas[paso % 4]
+        # The pair of voices is chosen exactly as defined above.  Only the
+        # octave of the upper voice will be moved if the interval is not
+        # a perfect tenth.
+        par_original = parejas[paso % 4]
+        grave, aguda = par_original
+        aguda = _a_decima(grave, aguda)
+        par = (grave, aguda)
         for p in par:
             resultado.append(
                 pretty_midi.Note(
