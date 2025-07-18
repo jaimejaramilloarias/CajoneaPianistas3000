@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from typing import List, Tuple
+import random
 import pretty_midi
 
 # Baseline notes present in the reference MIDI to be replaced by generated voicings
@@ -45,6 +46,78 @@ def obtener_posiciones_referencia(notes) -> List[dict]:
     print(f"Notas base encontradas: {len(posiciones)}")
     ejemplo = [(p['pitch'], p['start']) for p in posiciones[:10]]
     print(f"Ejemplo primeros 10: {ejemplo}")
+    return posiciones
+
+
+def generar_ventanas(
+    posiciones: List[dict],
+    grid_seg: float,
+    total_corcheas: int,
+    tam: int = 16,
+) -> List[List[dict]]:
+    """Extrae todas las ventanas posibles de ``tam`` corcheas.
+
+    Las posiciones se agrupan por corchea para poder copiar bloques
+    consecutivos fácilmente.  Cada ventana contiene copias de las
+    posiciones con sus tiempos relativos al inicio de dicha ventana.
+    """
+
+    pos_por_corchea: List[List[dict]] = [[] for _ in range(total_corcheas)]
+    for pos in posiciones:
+        idx = int(round(pos["start"] / grid_seg))
+        if 0 <= idx < total_corcheas:
+            pos_por_corchea[idx].append(pos)
+
+    ventanas: List[List[dict]] = []
+    for inicio in range(0, total_corcheas - tam + 1):
+        ventana: List[dict] = []
+        for i in range(inicio, inicio + tam):
+            for pos in pos_por_corchea[i]:
+                ventana.append(
+                    {
+                        "pitch": pos["pitch"],
+                        "start": pos["start"] - inicio * grid_seg,
+                        "end": pos["end"] - inicio * grid_seg,
+                    }
+                )
+        ventana.sort(key=lambda x: (x["start"], x["pitch"]))
+        ventanas.append(ventana)
+
+    return ventanas
+
+
+def construir_posiciones_desde_ventanas(
+    ventanas: List[List[dict]],
+    total_corcheas: int,
+    grid_seg: float,
+    *,
+    debug: bool = False,
+    selector=random.choice,
+) -> List[dict]:
+    """Genera posiciones concatenando ventanas aleatorias."""
+
+    posiciones: List[dict] = []
+    bloques = (total_corcheas + 15) // 16
+
+    for bloque in range(bloques):
+        inicio_cor = bloque * 16
+        ventana_idx = selector(range(len(ventanas)))
+        ventana = ventanas[ventana_idx]
+        if debug:
+            fin_cor = min(inicio_cor + 15, total_corcheas - 1)
+            idxs = list(range(inicio_cor, fin_cor + 1))
+            print(f"Bloque {bloque}: ventana {ventana_idx}, corcheas {idxs}")
+        offset = inicio_cor * grid_seg
+        for pos in ventana:
+            posiciones.append(
+                {
+                    "pitch": pos["pitch"],
+                    "start": pos["start"] + offset,
+                    "end": pos["end"] + offset,
+                }
+            )
+
+    posiciones.sort(key=lambda x: (x["start"], x["pitch"]))
     return posiciones
 
 
@@ -106,6 +179,9 @@ def exportar_montuno(
     voicings: List[List[int]],
     asignaciones: List[Tuple[str, List[int]]],
     output_path: Path,
+    *,
+    usar_ventanas: bool = True,
+    debug_ventanas: bool = False,
 ) -> None:
     """Generate a new MIDI file with the given voicings.
 
@@ -113,8 +189,19 @@ def exportar_montuno(
     last eighth-note of the progression.
     """
     notes, pm = leer_midi_referencia(midi_referencia_path)
-    posiciones = obtener_posiciones_referencia(notes)
-    _, grid, bpm = _grid_and_bpm(pm)
+    posiciones_base = obtener_posiciones_referencia(notes)
+    total_cor, grid, bpm = _grid_and_bpm(pm)
+
+    max_idx_asig = max((i for _, idxs in asignaciones for i in idxs), default=-1)
+    total_salida = max_idx_asig + 1
+
+    if usar_ventanas:
+        ventanas = generar_ventanas(posiciones_base, grid, total_cor)
+        posiciones = construir_posiciones_desde_ventanas(
+            ventanas, total_salida, grid, debug=debug_ventanas
+        )
+    else:
+        posiciones = posiciones_base
 
     nuevas_notas, max_idx = aplicar_voicings_a_referencia(
         posiciones, voicings, asignaciones, grid
