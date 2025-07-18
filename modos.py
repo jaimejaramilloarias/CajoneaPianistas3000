@@ -18,9 +18,8 @@ def montuno_tradicional(progresion_texto: str, midi_ref: Path, output: Path) -> 
     """Generate a montuno in the traditional style."""
     asignaciones = procesar_progresion_en_grupos(progresion_texto)
     acordes = [a for a, _ in asignaciones]
-    duraciones = [d for _, d in asignaciones]
     voicings = generar_voicings_enlazados_tradicional(acordes)
-    exportar_montuno(midi_ref, voicings, duraciones, output)
+    exportar_montuno(midi_ref, voicings, asignaciones, output)
 
 
 MODOS_DISPONIBLES = {
