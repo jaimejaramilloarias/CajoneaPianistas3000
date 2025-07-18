@@ -19,14 +19,10 @@ def generar(status_var: StringVar, midi_var: StringVar, texto: Text, modo_combo:
         return
 
     progresion_texto = texto.get("1.0", "end")
-    progresion_texto = progresion_texto.replace("\n", " ")
-    progresion_texto = progresion_texto.replace("|", " ")
-    progresion_texto = progresion_texto.strip()
-    if not progresion_texto:
+    progresion_texto = " ".join(progresion_texto.split())  # limpia espacios extra
+    if not progresion_texto.strip():
         status_var.set("Ingresa una progresión de acordes")
         return
-
-    progresion = [p.strip() for p in progresion_texto.split() if p.strip()]
     midi_ref = Path(ruta_midi)
     output = midi_ref.with_stem(midi_ref.stem + "_montuno")
 
@@ -37,7 +33,7 @@ def generar(status_var: StringVar, midi_var: StringVar, texto: Text, modo_combo:
         return
 
     try:
-        funcion(progresion, midi_ref, output)
+        funcion(progresion_texto, midi_ref, output)
         status_var.set(f"MIDI generado: {output}")
     except Exception as e:
         status_var.set(f"Error: {e}")
