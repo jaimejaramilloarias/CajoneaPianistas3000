@@ -190,17 +190,70 @@ def _arm_doble_octava(notas: List[pretty_midi.Note]) -> List[pretty_midi.Note]:
     return resultado
 
 
+def _arm_por_parejas(
+    notas: List[pretty_midi.Note],
+    voicings: List[List[int]],
+    asignaciones: List[Tuple[str, List[int]]],
+    grid_seg: float,
+    salto: int,
+    *,
+    debug: bool = False,
+) -> List[pretty_midi.Note]:
+    """Generate paired notes following the given voicing pattern.
+
+    ``salto`` indica cuántas posiciones se avanza dentro del voicing para
+    escoger la nota superior.  Un valor ``1`` genera terceras y ``2`` genera
+    sextas.  La función conserva la velocity y la posición rítmica de las
+    notas originales.
+    """
+
+    # Build a map from eighth index to voicing index for quick lookup
+    mapa: dict[int, int] = {}
+    for i, (_, idxs) in enumerate(asignaciones):
+        for ix in idxs:
+            mapa[ix] = i
+
+    resultado: List[pretty_midi.Note] = []
+    for n in notas:
+        resultado.append(n)
+        corchea = int(round(n.start / grid_seg))
+        if corchea not in mapa or n.pitch == 0:
+            continue
+        voicing = sorted(voicings[mapa[corchea]])
+        try:
+            idx = voicing.index(n.pitch)
+        except ValueError:
+            # Si la nota no pertenece al voicing actual se ignora la duplicación
+            if debug:
+                print(f"Nota {n.pitch} no encontrada en voicing {voicing}")
+            continue
+        idx_superior = (idx + salto) % 4
+        pitch_superior = voicing[idx_superior] + 12
+        nota_sup = pretty_midi.Note(
+            velocity=n.velocity,
+            pitch=pitch_superior,
+            start=n.start,
+            end=n.end,
+        )
+        if debug:
+            print(
+                f"Corchea {corchea}: baja {n.pitch}, alta {pitch_superior}"
+            )
+        resultado.append(nota_sup)
+
+    return resultado
+
+
 def _arm_noop(notas: List[pretty_midi.Note]) -> List[pretty_midi.Note]:
     """Placeholder for future harmonization types."""
 
     return notas
 
 
+# Armonizaciones simples que no dependen del contexto del voicing
 _ARMONIZADORES = {
     "octavas": _arm_octavas,
     "doble octava": _arm_doble_octava,
-    "terceras": _arm_noop,
-    "sextas": _arm_noop,
 }
 
 
@@ -273,10 +326,17 @@ def exportar_montuno(
         )
 
     # --------------------------------------------------------------
-    # Apply harmonization (e.g. duplicate notes an octave above)
+    # Apply harmonization
     # --------------------------------------------------------------
     if armonizacion:
-        nuevas_notas = aplicar_armonizacion(nuevas_notas, armonizacion)
+        arm = armonizacion.lower()
+        if arm in ("terceras", "sextas"):
+            salto = 1 if arm == "terceras" else 2
+            nuevas_notas = _arm_por_parejas(
+                nuevas_notas, voicings, asignaciones, grid, salto, debug=debug
+            )
+        else:
+            nuevas_notas = aplicar_armonizacion(nuevas_notas, armonizacion)
 
     pm_out = pretty_midi.PrettyMIDI(initial_tempo=bpm)
     inst_out = pretty_midi.Instrument(
