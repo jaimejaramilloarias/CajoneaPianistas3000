@@ -2,7 +2,6 @@
 
 from pathlib import Path
 from typing import List, Tuple
-import random
 import pretty_midi
 
 # Baseline notes present in the reference MIDI to be replaced by generated voicings
@@ -49,121 +48,44 @@ def obtener_posiciones_referencia(notes) -> List[dict]:
     return posiciones
 
 
-def generar_ventanas(
-    posiciones: List[dict],
+
+# ---------------------------------------------------------------------------
+# The previous implementation copied random 16-eighth windows from the
+# reference MIDI.  This logic has been removed to always use the full
+# reference sequentially.
+# ---------------------------------------------------------------------------
+
+def construir_posiciones_secuenciales(
+    posiciones_base: List[dict],
+    total_cor_dest: int,
+    total_cor_ref: int,
     grid_seg: float,
-    total_corcheas: int,
-    tam: int = 16,
-) -> List[List[dict]]:
-    """Extrae todas las ventanas posibles de ``tam`` corcheas.
-
-    Las posiciones se agrupan por corchea para poder copiar bloques
-    consecutivos fácilmente.  Cada ventana contiene copias de las
-    posiciones con sus tiempos relativos al inicio de dicha ventana.
-    """
-
-    pos_por_corchea: List[List[dict]] = [[] for _ in range(total_corcheas)]
-    for pos in posiciones:
-        idx = int(round(pos["start"] / grid_seg))
-        if 0 <= idx < total_corcheas:
-            pos_por_corchea[idx].append(pos)
-
-    ventanas: List[List[dict]] = []
-    for inicio in range(0, total_corcheas - tam + 1):
-        ventana: List[dict] = []
-        for i in range(inicio, inicio + tam):
-            for pos in pos_por_corchea[i]:
-                ventana.append(
-                    {
-                        "pitch": pos["pitch"],
-                        "start": pos["start"] - inicio * grid_seg,
-                        "end": pos["end"] - inicio * grid_seg,
-                    }
-                )
-        ventana.sort(key=lambda x: (x["start"], x["pitch"]))
-        ventanas.append(ventana)
-
-    return ventanas
-
-
-def construir_posiciones_desde_ventanas(
-    ventanas: List[List[dict]],
-    total_corcheas: int,
-    grid_seg: float,
-    *,
-    debug: bool = False,
-    selector=random.choice,
 ) -> List[dict]:
-    """Genera posiciones copiando ventanas aleatorias por bloques de 16 corcheas.
+    """Build note positions repeating the reference sequentially."""
 
-    La lista resultante contendra notas solamente dentro del rango de ``total_corcheas``.
-    Cada bloque de 16 corcheas se rellena a partir de una ventana elegida al
-    azar.  Si una corchea concreta de la ventana no contiene notas, dicha
-    corchea quedara en silencio en el bloque resultante.
-    """
-
-    # Pre calcula para cada ventana las notas asociadas a cada corchea relativa
-    ventanas_por_idx: List[List[List[dict]]] = []
-    dummy_count = 0
-    for ventana in ventanas:
-        grupos = [[] for _ in range(16)]
-        for pos in ventana:
-            idx = int(round(pos["start"] / grid_seg))
-            if 0 <= idx < 16:
-                grupos[idx].append(
-                    {
-                        "pitch": pos["pitch"],
-                        "start": pos["start"] - idx * grid_seg,
-                        "end": pos["end"] - idx * grid_seg,
-                    }
-                )
-
-        for i in range(16):
-            if not grupos[i]:
-                # Nota muda que actúa como marcador de corchea.
-                # Se usa 21 (A0) porque queda fuera del rango de trabajo
-                # y luego se ignorará al aplicar los voicings.
-                grupos[i].append(
-                    {
-                        "pitch": 21,
-                        "start": 0.0,
-                        "end": min(0.01, grid_seg),
-                    }
-                )
-                dummy_count += 1
-
-        ventanas_por_idx.append(grupos)
-
-    if debug:
-        print(f"Dummy notes agregadas: {dummy_count}")
+    grupos_ref: List[List[dict]] = [[] for _ in range(total_cor_ref)]
+    for pos in posiciones_base:
+        idx = int(round(pos["start"] / grid_seg))
+        if 0 <= idx < total_cor_ref:
+            grupos_ref[idx].append(
+                {
+                    "pitch": pos["pitch"],
+                    "start": pos["start"] - idx * grid_seg,
+                    "end": pos["end"] - idx * grid_seg,
+                }
+            )
 
     posiciones: List[dict] = []
-    bloques = (total_corcheas + 15) // 16
-
-    for bloque in range(bloques):
-        ventana_idx = selector(range(len(ventanas_por_idx)))
-        grupos = ventanas_por_idx[ventana_idx]
-        if debug:
-            inicio_cor = bloque * 16
-            fin_cor = min(inicio_cor + 15, total_corcheas - 1)
-            idxs = list(range(inicio_cor, fin_cor + 1))
-            print(f"Bloque {bloque}: ventana {ventana_idx}, corcheas {idxs}")
-
-        for local_idx in range(16):
-            abs_idx = bloque * 16 + local_idx
-            if abs_idx >= total_corcheas:
-                break
-            notas = grupos[local_idx]
-            for nota in notas:
-                if nota["pitch"] == 21:
-                    continue  # placeholder para silencio
-                posiciones.append(
-                    {
-                        "pitch": nota["pitch"],
-                        "start": abs_idx * grid_seg + nota["start"],
-                        "end": abs_idx * grid_seg + nota["end"],
-                    }
-                )
+    for dest_idx in range(total_cor_dest):
+        ref_idx = dest_idx % total_cor_ref
+        for nota in grupos_ref[ref_idx]:
+            posiciones.append(
+                {
+                    "pitch": nota["pitch"],
+                    "start": dest_idx * grid_seg + nota["start"],
+                    "end": dest_idx * grid_seg + nota["end"],
+                }
+            )
 
     posiciones.sort(key=lambda x: (x["start"], x["pitch"]))
     return posiciones
@@ -234,10 +156,10 @@ def exportar_montuno(
     midi_referencia_path: Path,
     voicings: List[List[int]],
     asignaciones: List[Tuple[str, List[int]]],
+    num_compases: int,
     output_path: Path,
     *,
-    usar_ventanas: bool = True,
-    debug_ventanas: bool = False,
+    debug: bool = False,
 ) -> None:
     """Generate a new MIDI file with the given voicings.
 
@@ -246,29 +168,23 @@ def exportar_montuno(
     """
     notes, pm = leer_midi_referencia(midi_referencia_path)
     posiciones_base = obtener_posiciones_referencia(notes)
-    total_cor, grid, bpm = _grid_and_bpm(pm)
+    total_cor_ref, grid, bpm = _grid_and_bpm(pm)
 
-    if debug_ventanas:
+    if debug:
         print("Asignacion de acordes a corcheas:")
         for acorde, idxs in asignaciones:
             print(f"  {acorde}: {idxs}")
 
-    max_idx_asig = max((i for _, idxs in asignaciones for i in idxs), default=-1)
-    total_salida = max_idx_asig + 1
-
-    if usar_ventanas:
-        ventanas = generar_ventanas(posiciones_base, grid, total_cor)
-        posiciones = construir_posiciones_desde_ventanas(
-            ventanas, total_salida, grid, debug=debug_ventanas
-        )
-    else:
-        posiciones = posiciones_base
-
-    nuevas_notas, max_idx = aplicar_voicings_a_referencia(
-        posiciones, voicings, asignaciones, grid, debug=debug_ventanas
+    total_dest_cor = num_compases * 8
+    posiciones = construir_posiciones_secuenciales(
+        posiciones_base, total_dest_cor, total_cor_ref, grid
     )
 
-    limite_cor = ((max_idx + 1 + 7) // 8) * 8 if max_idx >= 0 else 0
+    nuevas_notas, _ = aplicar_voicings_a_referencia(
+        posiciones, voicings, asignaciones, grid, debug=debug
+    )
+
+    limite_cor = total_dest_cor
     limite = limite_cor * grid
     nuevas_notas = [n for n in nuevas_notas if n.start < limite]
 
@@ -318,7 +234,7 @@ def _siguiente_grupo(indice: int) -> int:
 
 
 
-def procesar_progresion_en_grupos(texto: str) -> List[Tuple[str, List[int]]]:
+def procesar_progresion_en_grupos(texto: str) -> Tuple[List[Tuple[str, List[int]]], int]:
     """Asignar corcheas a los acordes usando ``PATRON_GRUPOS``.
 
     El texto de la progresión se divide por barras ``|`` en segmentos.  Cada
@@ -326,9 +242,12 @@ def procesar_progresion_en_grupos(texto: str) -> List[Tuple[str, List[int]]]:
     asignan dos grupos consecutivos del patrón sumados.  Si hay dos acordes,
     cada uno toma un grupo.  Los índices de corchea son absolutos y se asignan de
     manera continua sin respetar límites de compás.
+
+    Devuelve la lista de asignaciones y el número de compases escritos.
     """
 
     segmentos = [s.strip() for s in texto.split("|") if s.strip()]
+    num_compases = len(segmentos)
 
     resultado: List[Tuple[str, List[int]]] = []
     indice_patron = 0
@@ -365,4 +284,4 @@ def procesar_progresion_en_grupos(texto: str) -> List[Tuple[str, List[int]]]:
     for acorde, idxs in resultado:
         print(f"{acorde}: {idxs}")
 
-    return resultado
+    return resultado, num_compases

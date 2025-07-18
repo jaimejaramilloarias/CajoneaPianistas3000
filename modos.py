@@ -16,10 +16,10 @@ from midi_utils import (
 
 def montuno_tradicional(progresion_texto: str, midi_ref: Path, output: Path) -> None:
     """Generate a montuno in the traditional style."""
-    asignaciones = procesar_progresion_en_grupos(progresion_texto)
+    asignaciones, compases = procesar_progresion_en_grupos(progresion_texto)
     acordes = [a for a, _ in asignaciones]
     voicings = generar_voicings_enlazados_tradicional(acordes)
-    exportar_montuno(midi_ref, voicings, asignaciones, output)
+    exportar_montuno(midi_ref, voicings, asignaciones, compases, output)
 
 
 MODOS_DISPONIBLES = {
