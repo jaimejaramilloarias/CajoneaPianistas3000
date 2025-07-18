@@ -126,8 +126,53 @@ def exportar_montuno(
 # Traditional rhythmic grouping
 # ==========================================================================
 
-def generar_grupos_corchea(num_acordes: int) -> List[int]:
-    grupos = [3, 2, 4, 2]
-    while len(grupos) < num_acordes:
-        grupos += [5, 2, 4, 2]
-    return grupos[:num_acordes]
+# Pattern of eighth-note groups. The first four groups use ``PATRON_INICIAL``
+# and then ``PATRON_REPETICION`` is repeated indefinitely. Modify these lists
+# to tweak the rhythmic feel.
+PATRON_INICIAL = [3, 2, 4, 2]
+PATRON_REPETICION = [5, 2, 4, 2]
+
+
+def _iterar_patron_grupos():
+    """Yield eighth-note group lengths following the defined pattern."""
+    for g in PATRON_INICIAL:
+        yield g
+    while True:
+        for g in PATRON_REPETICION:
+            yield g
+
+
+def generar_grupos_corchea(cantidad: int) -> List[int]:
+    """Return ``cantidad`` eighth-note groups following the rhythmic pattern."""
+    gen = _iterar_patron_grupos()
+    return [next(gen) for _ in range(cantidad)]
+
+
+def procesar_progresion_en_grupos(texto: str) -> Tuple[List[str], List[int]]:
+    """Parse ``texto`` and map chords to their eighth-note groups."""
+
+    texto = " ".join(texto.strip().split())
+    segmentos = [s.strip() for s in texto.split("|") if s.strip()]
+
+    acordes: List[str] = []
+    duraciones: List[int] = []
+    gen = _iterar_patron_grupos()
+
+    for seg in segmentos:
+        ch = [c for c in seg.split() if c]
+        if len(ch) == 1:
+            g1 = next(gen)
+            g2 = next(gen)
+            acordes.append(ch[0])
+            duraciones.append(g1 + g2)
+        elif len(ch) == 2:
+            g1 = next(gen)
+            g2 = next(gen)
+            acordes.append(ch[0])
+            duraciones.append(g1)
+            acordes.append(ch[1])
+            duraciones.append(g2)
+        else:
+            raise ValueError("Se permiten uno o dos acordes entre barras")
+
+    return acordes, duraciones
