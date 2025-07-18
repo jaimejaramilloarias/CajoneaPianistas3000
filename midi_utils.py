@@ -365,12 +365,45 @@ def exportar_montuno(
 # Rhythmic pattern configuration
 # ---------------------------------------------------------------------------
 # ``PRIMER_BLOQUE`` y ``PATRON_REPETIDO`` definen el esquema de agrupación de
-# corcheas utilizado por el modo tradicional.  El primer bloque se utiliza tal
-# cual una única vez y a partir de entonces se repite ``PATRON_REPETIDO`` de
-# forma indefinida.  Para cambiar el patrón basta con modificar estas dos
-# listas.
-PRIMER_BLOQUE: List[int] = [3, 4, 4, 3]
-PATRON_REPETIDO: List[int] = [5, 4, 4, 3]
+# corcheas utilizado por el modo tradicional.
+
+# ---------------------------------------------------------------------------
+# Clave configuration
+# ---------------------------------------------------------------------------
+# Cada clave contiene el nombre del archivo MIDI de referencia y las listas
+# ``primer_bloque`` y ``patron_repetido``.  Para añadir nuevos tipos de clave
+# simplemente agrega una nueva entrada al diccionario ``CLAVES``.
+CLAVES = {
+    "2-3": {
+        "midi": Path("tradicional_2-3.mid"),
+        "primer_bloque": [3, 4, 4, 3],
+        "patron_repetido": [5, 4, 4, 3],
+    },
+    "3-2": {
+        "midi": Path("tradicional_3-2.mid"),
+        "primer_bloque": [3, 3, 5, 4],
+        "patron_repetido": [4, 3, 5, 4],
+    },
+}
+
+CLAVE_ACTUAL = "2-3"
+MIDI_REFERENCIA = CLAVES[CLAVE_ACTUAL]["midi"]
+PRIMER_BLOQUE: List[int] = CLAVES[CLAVE_ACTUAL]["primer_bloque"]
+PATRON_REPETIDO: List[int] = CLAVES[CLAVE_ACTUAL]["patron_repetido"]
+
+
+def configurar_clave(clave: str) -> Path:
+    """Selecciona ``clave`` y devuelve la ruta al MIDI correspondiente."""
+
+    global CLAVE_ACTUAL, PRIMER_BLOQUE, PATRON_REPETIDO, MIDI_REFERENCIA
+    if clave not in CLAVES:
+        raise ValueError(f"Clave desconocida: {clave}")
+    conf = CLAVES[clave]
+    CLAVE_ACTUAL = clave
+    MIDI_REFERENCIA = conf["midi"]
+    PRIMER_BLOQUE = conf["primer_bloque"]
+    PATRON_REPETIDO = conf["patron_repetido"]
+    return MIDI_REFERENCIA
 
 # ``PATRON_GRUPOS`` se mantiene solo como referencia para visualizar los
 # primeros valores calculados con la configuración actual.
