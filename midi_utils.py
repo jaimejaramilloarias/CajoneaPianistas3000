@@ -126,12 +126,15 @@ def exportar_montuno(
 # Traditional rhythmic grouping
 # ==========================================================================
 
-# Pattern of eighth-note groups.  ``PATRON_INICIAL`` is applied to the very
-# first four groups and afterwards ``PATRON_REPETICION`` is looped forever.
-# Editing these lists allows tweaking the rhythmic feel without touching the
-# rest of the code.
-PATRON_INICIAL = [3, 2, 4, 2]
-PATRON_REPETICION = [5, 2, 4, 2]
+# ---------------------------------------------------------------------------
+# Rhythmic pattern configuration
+# ---------------------------------------------------------------------------
+# ``PATRON_INICIAL`` se utiliza para los cuatro primeros grupos de corcheas.
+# A partir de ahí se repite indefinidamente ``PATRON_REPETICION``.  Modificar
+# estas listas permite ajustar fácilmente el feel rítmico sin cambiar el resto
+# del código.
+PATRON_INICIAL: List[int] = [3, 2, 4, 2]
+PATRON_REPETICION: List[int] = [5, 2, 4, 2]
 
 
 def _iterar_patron_grupos():
@@ -163,6 +166,7 @@ def procesar_progresion_en_grupos(texto: str) -> Tuple[List[str], List[int]]:
 
     acordes: List[str] = []
     duraciones: List[int] = []
+    grupos_por_acorde: List[List[int]] = []
     gen = _iterar_patron_grupos()
 
     for seg in segmentos:
@@ -173,15 +177,24 @@ def procesar_progresion_en_grupos(texto: str) -> Tuple[List[str], List[int]]:
             g2 = next(gen)
             acordes.append(ch[0])
             duraciones.append(g1 + g2)
+            grupos_por_acorde.append([g1, g2])
         elif len(ch) == 2:
             # Two chords -> one group each, sequentially
             g1 = next(gen)
             g2 = next(gen)
             acordes.append(ch[0])
             duraciones.append(g1)
+            grupos_por_acorde.append([g1])
             acordes.append(ch[1])
             duraciones.append(g2)
+            grupos_por_acorde.append([g2])
         else:
             raise ValueError("Se permiten uno o dos acordes entre barras")
+
+    # Muestra en consola el resultado para facilitar la depuración
+    for a, grupos in zip(acordes, grupos_por_acorde):
+        resumen = ",".join(str(g) for g in grupos)
+        total = sum(grupos)
+        print(f"{a}: {resumen} (total {total} corcheas)")
 
     return acordes, duraciones

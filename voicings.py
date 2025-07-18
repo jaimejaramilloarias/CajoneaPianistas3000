@@ -70,35 +70,49 @@ def _ajustar_octava(pitch: int) -> int:
 
 
 def generar_voicings_enlazados_tradicional(progresion: List[str]) -> List[List[int]]:
-    """Generate voicings mapped directly onto the reference pitches.
+    """Generate four-note voicings applying simple voice leading.
 
-    Each voicing contains four notes placed on the same pitch positions as the
-    reference MIDI: ``[55, 57, 60, 64]`` (G3, A3, C4, E4).  For every chord the
-    notes are assigned from low to high following the order provided by the
-    traditional interval dictionary.  Octaves are only shifted as needed to keep
-    the resulting note within the ``RANGO_MIN``/``RANGO_MAX`` limits.
+    The notes of each chord are placed as close as possible to the previous
+    voicing so that the jump in the bass voice is minimal.  All notes are kept
+    within ``RANGO_MIN`` and ``RANGO_MAX`` and the resulting voicing is always
+    sorted from low to high.
     """
 
-    notas_referencia = [55, 57, 60, 64]
+    from itertools import permutations
+
+    referencia = [55, 57, 60, 64]  # posiciones de las cuatro voces
     voicings: List[List[int]] = []
+    bajo_anterior = referencia[0]
+
+    def ajustar(pc: int, target: int) -> int:
+        """Return ``pc`` adjusted in octaves near ``target`` within range."""
+        pitch = target + ((pc - target) % 12)
+        if abs(pitch - target) > abs(pitch - 12 - target):
+            pitch -= 12
+        while pitch < RANGO_MIN:
+            pitch += 12
+        while pitch > RANGO_MAX:
+            pitch -= 12
+        return pitch
 
     for nombre in progresion:
         root, suf = parsear_nombre_acorde(nombre)
-        intervalos = INTERVALOS_TRADICIONALES[suf]
+        pcs = [(root + i) % 12 for i in INTERVALOS_TRADICIONALES[suf]]
 
-        voicing: List[int] = []
-        for base_pitch, intervalo in zip(notas_referencia, intervalos):
-            nota_pc = (root + intervalo) % 12
-            pitch = base_pitch + (nota_pc - (base_pitch % 12))
-            while pitch < RANGO_MIN:
-                pitch += 12
-            while pitch > RANGO_MAX:
-                pitch -= 12
-            voicing.append(pitch)
+        mejor: List[int] | None = None
+        mejor_salto: int | None = None
 
-        # ensure result is sorted from low to high
-        voicing.sort()
-        voicings.append(voicing)
+        for perm in permutations(pcs):
+            notas = [ajustar(pc, t) for pc, t in zip(perm, referencia)]
+            notas.sort()
+            salto = abs(notas[0] - bajo_anterior)
+            if mejor is None or salto < mejor_salto:
+                mejor = notas
+                mejor_salto = salto
+
+        assert mejor is not None
+        voicings.append(mejor)
+        bajo_anterior = mejor[0]
 
     return voicings
 
