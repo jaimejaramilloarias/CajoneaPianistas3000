@@ -1,19 +1,14 @@
 """Simple GUI for montuno generation."""
 
 from pathlib import Path
-from tkinter import Tk, Text, Button, Label, filedialog, StringVar, ttk
+from tkinter import Tk, Text, Button, Label, StringVar, ttk, Radiobutton
+
+from midi_utils import configurar_clave
 
 from modos import MODOS_DISPONIBLES
 
 # Opciones de armonización disponibles
 ARMONIZACIONES = ["Octavas", "Doble octava", "Terceras", "Sextas"]
-
-
-def seleccionar_midi(var: StringVar):
-    path = filedialog.askopenfilename(title="MIDI de referencia", filetypes=[("MIDI files", "*.mid"), ("All files", "*.*")])
-    if path:
-        var.set(path)
-
 
 def generar(
     status_var: StringVar,
@@ -23,9 +18,6 @@ def generar(
     armon_combo: ttk.Combobox,
 ) -> None:
     ruta_midi = midi_var.get()
-    if not ruta_midi:
-        status_var.set("Selecciona un MIDI de referencia")
-        return
 
     progresion_texto = texto.get("1.0", "end")
     progresion_texto = " ".join(progresion_texto.split())  # limpia espacios extra
@@ -55,13 +47,34 @@ def main():
     root.title("Generador de Montunos")
 
     midi_var = StringVar()
+    clave_var = StringVar(value="2-3")
     status_var = StringVar()
 
     Label(root, text="Progresión de acordes:").pack(anchor="w")
     texto = Text(root, width=40, height=4)
     texto.pack(fill="x", padx=5)
 
-    Button(root, text="Seleccionar MIDI", command=lambda: seleccionar_midi(midi_var)).pack(pady=5)
+    def actualizar():
+        ruta = configurar_clave(clave_var.get())
+        midi_var.set(str(ruta))
+
+    actualizar()
+
+    Label(root, text="Clave:").pack(anchor="w", pady=(5, 0))
+    Radiobutton(
+        root,
+        text="Clave 2-3",
+        variable=clave_var,
+        value="2-3",
+        command=actualizar,
+    ).pack(anchor="w")
+    Radiobutton(
+        root,
+        text="Clave 3-2",
+        variable=clave_var,
+        value="3-2",
+        command=actualizar,
+    ).pack(anchor="w")
     Label(root, textvariable=midi_var).pack()
 
     Label(root, text="Modo:").pack(anchor="w", pady=(10, 0))
