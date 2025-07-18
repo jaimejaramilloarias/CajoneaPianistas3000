@@ -33,6 +33,9 @@ def obtener_posiciones_referencia(notes) -> List[dict]:
                 }
             )
     posiciones.sort(key=lambda x: (x["start"], x["pitch"]))
+    print(f"Notas base encontradas: {len(posiciones)}")
+    ejemplo = [(p['pitch'], p['start']) for p in posiciones[:10]]
+    print(f"Ejemplo primeros 10: {ejemplo}")
     return posiciones
 
 
