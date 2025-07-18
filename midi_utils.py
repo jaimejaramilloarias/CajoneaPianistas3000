@@ -94,28 +94,55 @@ def construir_posiciones_desde_ventanas(
     debug: bool = False,
     selector=random.choice,
 ) -> List[dict]:
-    """Genera posiciones concatenando ventanas aleatorias."""
+    """Genera posiciones copiando ventanas aleatorias por bloques de 16 corcheas.
+
+    La lista resultante contendra notas solamente dentro del rango de ``total_corcheas``.
+    Cada bloque de 16 corcheas se rellena a partir de una ventana elegida al
+    azar.  Si una corchea concreta de la ventana no contiene notas, dicha
+    corchea quedara en silencio en el bloque resultante.
+    """
+
+    # Pre calcula para cada ventana las notas asociadas a cada corchea relativa
+    ventanas_por_idx: List[List[List[dict]]] = []
+    for ventana in ventanas:
+        grupos = [[] for _ in range(16)]
+        for pos in ventana:
+            idx = int(round(pos["start"] / grid_seg))
+            if 0 <= idx < 16:
+                grupos[idx].append(
+                    {
+                        "pitch": pos["pitch"],
+                        "start": pos["start"] - idx * grid_seg,
+                        "end": pos["end"] - idx * grid_seg,
+                    }
+                )
+        ventanas_por_idx.append(grupos)
 
     posiciones: List[dict] = []
     bloques = (total_corcheas + 15) // 16
 
     for bloque in range(bloques):
-        inicio_cor = bloque * 16
-        ventana_idx = selector(range(len(ventanas)))
-        ventana = ventanas[ventana_idx]
+        ventana_idx = selector(range(len(ventanas_por_idx)))
+        grupos = ventanas_por_idx[ventana_idx]
         if debug:
+            inicio_cor = bloque * 16
             fin_cor = min(inicio_cor + 15, total_corcheas - 1)
             idxs = list(range(inicio_cor, fin_cor + 1))
             print(f"Bloque {bloque}: ventana {ventana_idx}, corcheas {idxs}")
-        offset = inicio_cor * grid_seg
-        for pos in ventana:
-            posiciones.append(
-                {
-                    "pitch": pos["pitch"],
-                    "start": pos["start"] + offset,
-                    "end": pos["end"] + offset,
-                }
-            )
+
+        for local_idx in range(16):
+            abs_idx = bloque * 16 + local_idx
+            if abs_idx >= total_corcheas:
+                break
+            notas = grupos[local_idx]
+            for nota in notas:
+                posiciones.append(
+                    {
+                        "pitch": nota["pitch"],
+                        "start": abs_idx * grid_seg + nota["start"],
+                        "end": abs_idx * grid_seg + nota["end"],
+                    }
+                )
 
     posiciones.sort(key=lambda x: (x["start"], x["pitch"]))
     return posiciones
@@ -130,6 +157,8 @@ def aplicar_voicings_a_referencia(
     voicings: List[List[int]],
     asignaciones: List[Tuple[str, List[int]]],
     grid_seg: float,
+    *,
+    debug: bool = False,
 ) -> Tuple[List[pretty_midi.Note], int]:
     """Reemplaza las notas de referencia por los voicings generados.
 
@@ -150,6 +179,8 @@ def aplicar_voicings_a_referencia(
     for pos in posiciones:
         corchea = int(round(pos["start"] / grid_seg))
         if corchea not in mapa:
+            if debug:
+                print(f"Corchea {corchea}: silencio")
             continue  # silencio
         voicing = sorted(voicings[mapa[corchea]])
         orden = NOTAS_BASE.index(pos["pitch"])  # posición dentro del voicing
@@ -159,6 +190,10 @@ def aplicar_voicings_a_referencia(
             start=pos["start"],
             end=pos["end"],
         )
+        if debug:
+            print(
+                f"Corchea {corchea}: nota base {pos['pitch']} -> {nueva_nota.pitch}"
+            )
         nuevas_notas.append(nueva_nota)
 
     return nuevas_notas, max_idx
@@ -192,6 +227,11 @@ def exportar_montuno(
     posiciones_base = obtener_posiciones_referencia(notes)
     total_cor, grid, bpm = _grid_and_bpm(pm)
 
+    if debug_ventanas:
+        print("Asignacion de acordes a corcheas:")
+        for acorde, idxs in asignaciones:
+            print(f"  {acorde}: {idxs}")
+
     max_idx_asig = max((i for _, idxs in asignaciones for i in idxs), default=-1)
     total_salida = max_idx_asig + 1
 
@@ -204,7 +244,7 @@ def exportar_montuno(
         posiciones = posiciones_base
 
     nuevas_notas, max_idx = aplicar_voicings_a_referencia(
-        posiciones, voicings, asignaciones, grid
+        posiciones, voicings, asignaciones, grid, debug=debug_ventanas
     )
 
     limite_cor = ((max_idx + 1 + 7) // 8) * 8 if max_idx >= 0 else 0
