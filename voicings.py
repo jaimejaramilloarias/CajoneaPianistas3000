@@ -70,31 +70,35 @@ def _ajustar_octava(pitch: int) -> int:
 
 
 def generar_voicings_enlazados_tradicional(progresion: List[str]) -> List[List[int]]:
-    """Generate linked voicings for a chord progression keeping notes near G3-E4."""
+    """Generate voicings mapped directly onto the reference pitches.
+
+    Each voicing contains four notes placed on the same pitch positions as the
+    reference MIDI: ``[55, 57, 60, 64]`` (G3, A3, C4, E4).  For every chord the
+    notes are assigned from low to high following the order provided by the
+    traditional interval dictionary.  Octaves are only shifted as needed to keep
+    the resulting note within the ``RANGO_MIN``/``RANGO_MAX`` limits.
+    """
+
+    notas_referencia = [55, 57, 60, 64]
     voicings: List[List[int]] = []
-    bajo_anterior = 55  # start near the reference bass
 
     for nombre in progresion:
         root, suf = parsear_nombre_acorde(nombre)
         intervalos = INTERVALOS_TRADICIONALES[suf]
-        notas_base = [root + i for i in intervalos]
 
-        candidatos = []
-        for o in range(3, 6):  # explore octaves around the reference range
-            acorde = [n + 12 * o for n in notas_base]
-            acorde = [_ajustar_octava(n) for n in acorde]
-            for idx_bajo, n in enumerate(acorde):
-                distancia = abs(n - bajo_anterior)
-                candidatos.append((distancia, idx_bajo, acorde))
+        voicing: List[int] = []
+        for base_pitch, intervalo in zip(notas_referencia, intervalos):
+            nota_pc = (root + intervalo) % 12
+            pitch = base_pitch + (nota_pc - (base_pitch % 12))
+            while pitch < RANGO_MIN:
+                pitch += 12
+            while pitch > RANGO_MAX:
+                pitch -= 12
+            voicing.append(pitch)
 
-        mejor = min(candidatos, key=lambda x: x[0])
-        idx_bajo = mejor[1]
-        acorde = mejor[2]
-        nuevo_bajo = acorde[idx_bajo]
-        resto = acorde[:idx_bajo] + acorde[idx_bajo + 1:]
-        resto.sort()
-        voicings.append([nuevo_bajo] + resto)
-        bajo_anterior = nuevo_bajo
+        # ensure result is sorted from low to high
+        voicing.sort()
+        voicings.append(voicing)
 
     return voicings
 
