@@ -14,12 +14,28 @@ from midi_utils import (
 # Traditional mode
 # ==========================================================================
 
-def montuno_tradicional(progresion_texto: str, midi_ref: Path, output: Path) -> None:
-    """Generate a montuno in the traditional style."""
+def montuno_tradicional(
+    progresion_texto: str,
+    midi_ref: Path,
+    output: Path,
+    armonizacion: str | None = None,
+) -> None:
+    """Generate a montuno in the traditional style.
+
+    ``armonizacion`` especifica la forma de duplicar las notas generadas. Por
+    ahora solo se aplica la opción "Octavas".
+    """
     asignaciones, compases = procesar_progresion_en_grupos(progresion_texto)
     acordes = [a for a, _ in asignaciones]
     voicings = generar_voicings_enlazados_tradicional(acordes)
-    exportar_montuno(midi_ref, voicings, asignaciones, compases, output)
+    exportar_montuno(
+        midi_ref,
+        voicings,
+        asignaciones,
+        compases,
+        output,
+        armonizacion=armonizacion,
+    )
 
 
 MODOS_DISPONIBLES = {

@@ -142,6 +142,37 @@ def aplicar_voicings_a_referencia(
     return nuevas_notas, max_idx
 
 
+def aplicar_armonizacion(notas: List[pretty_midi.Note], opcion: str) -> List[pretty_midi.Note]:
+    """Apply the selected harmonization option to the list of notes."""
+
+    resultado: List[pretty_midi.Note] = []
+    if opcion.lower() == "octavas":
+        # Duplicate each note one octave above
+        for n in notas:
+            resultado.append(n)
+            if n.pitch > 0:
+                resultado.append(
+                    pretty_midi.Note(
+                        velocity=n.velocity,
+                        pitch=n.pitch + 12,
+                        start=n.start,
+                        end=n.end,
+                    )
+                )
+        return resultado
+    elif opcion.lower() == "doble octava":
+        # TODO: implementar lógica para duplicar dos octavas por encima
+        pass
+    elif opcion.lower() == "terceras":
+        # TODO: implementar duplicación a la tercera
+        pass
+    elif opcion.lower() == "sextas":
+        # TODO: implementar duplicación a la sexta
+        pass
+
+    return notas
+
+
 def _grid_and_bpm(pm: pretty_midi.PrettyMIDI) -> Tuple[int, float, float]:
     """Return total number of eighth notes, duration of an eighth and bpm."""
     total = pm.get_end_time()
@@ -158,13 +189,15 @@ def exportar_montuno(
     asignaciones: List[Tuple[str, List[int]]],
     num_compases: int,
     output_path: Path,
+    armonizacion: str | None = None,
     *,
     debug: bool = False,
 ) -> None:
     """Generate a new MIDI file with the given voicings.
 
-    The resulting notes are trimmed so the output stops after the
-    last eighth-note of the progression.
+    The resulting notes are trimmed so the output stops after the last
+    eighth-note of the progression.  ``armonizacion`` indica si las notas se
+    deben duplicar (por ejemplo, en octavas).
     """
     notes, pm = leer_midi_referencia(midi_referencia_path)
     posiciones_base = obtener_posiciones_referencia(notes)
@@ -198,6 +231,12 @@ def exportar_montuno(
                 end=limite,
             )
         )
+
+    # --------------------------------------------------------------
+    # Apply harmonization (e.g. duplicate notes an octave above)
+    # --------------------------------------------------------------
+    if armonizacion:
+        nuevas_notas = aplicar_armonizacion(nuevas_notas, armonizacion)
 
     pm_out = pretty_midi.PrettyMIDI(initial_tempo=bpm)
     inst_out = pretty_midi.Instrument(

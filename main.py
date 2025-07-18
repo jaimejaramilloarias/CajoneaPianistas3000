@@ -5,6 +5,9 @@ from tkinter import Tk, Text, Button, Label, filedialog, StringVar, ttk
 
 from modos import MODOS_DISPONIBLES
 
+# Opciones de armonización disponibles
+ARMONIZACIONES = ["Octavas", "Doble octava", "Terceras", "Sextas"]
+
 
 def seleccionar_midi(var: StringVar):
     path = filedialog.askopenfilename(title="MIDI de referencia", filetypes=[("MIDI files", "*.mid"), ("All files", "*.*")])
@@ -12,7 +15,13 @@ def seleccionar_midi(var: StringVar):
         var.set(path)
 
 
-def generar(status_var: StringVar, midi_var: StringVar, texto: Text, modo_combo: ttk.Combobox):
+def generar(
+    status_var: StringVar,
+    midi_var: StringVar,
+    texto: Text,
+    modo_combo: ttk.Combobox,
+    armon_combo: ttk.Combobox,
+) -> None:
     ruta_midi = midi_var.get()
     if not ruta_midi:
         status_var.set("Selecciona un MIDI de referencia")
@@ -32,8 +41,10 @@ def generar(status_var: StringVar, midi_var: StringVar, texto: Text, modo_combo:
         status_var.set(f"Modo no soportado: {modo_nombre}")
         return
 
+    armonizacion = armon_combo.get()
+
     try:
-        funcion(progresion_texto, midi_ref, output)
+        funcion(progresion_texto, midi_ref, output, armonizacion)
         status_var.set(f"MIDI generado: {output}")
     except Exception as e:
         status_var.set(f"Error: {e}")
@@ -58,7 +69,16 @@ def main():
     modo_combo.current(0)
     modo_combo.pack(fill="x", padx=5)
 
-    Button(root, text="Generar", command=lambda: generar(status_var, midi_var, texto, modo_combo)).pack(pady=10)
+    Label(root, text="Armonización:").pack(anchor="w", pady=(10, 0))
+    armon_combo = ttk.Combobox(root, values=ARMONIZACIONES)
+    armon_combo.current(0)
+    armon_combo.pack(fill="x", padx=5)
+
+    Button(
+        root,
+        text="Generar",
+        command=lambda: generar(status_var, midi_var, texto, modo_combo, armon_combo),
+    ).pack(pady=10)
     Label(root, textvariable=status_var).pack(pady=(5, 0))
 
     root.mainloop()
