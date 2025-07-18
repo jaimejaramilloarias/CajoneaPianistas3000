@@ -82,7 +82,7 @@ def generar_voicings_enlazados_tradicional(progresion):
 
 # ===================== Manejo de archivo MIDI referencia ======================
 
-NOTAS_BASE = [43, 45, 48, 52]  # G2, A2, C3, E3
+NOTAS_BASE = [55, 57, 60, 64]  # G3, A3, C4, E4
 
 def leer_midi_referencia(midi_path):
     pm = pretty_midi.PrettyMIDI(str(midi_path))
