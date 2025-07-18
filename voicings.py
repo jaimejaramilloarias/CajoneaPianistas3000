@@ -56,35 +56,46 @@ def parsear_nombre_acorde(nombre: str) -> Tuple[int, str]:
     return NOTAS[root], suf
 
 
+RANGO_MIN = 53  # F3
+RANGO_MAX = 67  # G4
+
+
+def _ajustar_octava(pitch: int) -> int:
+    """Move ``pitch`` by octaves so it falls inside ``RANGO_MIN``-``RANGO_MAX``."""
+    while pitch < RANGO_MIN:
+        pitch += 12
+    while pitch > RANGO_MAX:
+        pitch -= 12
+    return pitch
+
+
 def generar_voicings_enlazados_tradicional(progresion: List[str]) -> List[List[int]]:
-    """Generate linked voicings for a chord progression using the traditional approach."""
+    """Generate linked voicings for a chord progression keeping notes near G3-E4."""
     voicings: List[List[int]] = []
-    bajo_anterior = 43  # G2 is a sensible starting point
+    bajo_anterior = 55  # start near the reference bass
 
     for nombre in progresion:
         root, suf = parsear_nombre_acorde(nombre)
         intervalos = INTERVALOS_TRADICIONALES[suf]
         notas_base = [root + i for i in intervalos]
+
         candidatos = []
-        for o in range(1, 5):  # explore a few octaves
+        for o in range(3, 6):  # explore octaves around the reference range
             acorde = [n + 12 * o for n in notas_base]
+            acorde = [_ajustar_octava(n) for n in acorde]
             for idx_bajo, n in enumerate(acorde):
                 distancia = abs(n - bajo_anterior)
-                candidatos.append((distancia, n, acorde, idx_bajo))
-        # prefer the same bass note if possible
-        candidatos_comunes = [c for c in candidatos if c[1] == bajo_anterior]
-        if candidatos_comunes:
-            mejor = min(candidatos_comunes, key=lambda x: x[0])
-        else:
-            mejor = min(candidatos, key=lambda x: x[0])
-        nuevo_bajo = mejor[1]
+                candidatos.append((distancia, idx_bajo, acorde))
+
+        mejor = min(candidatos, key=lambda x: x[0])
+        idx_bajo = mejor[1]
         acorde = mejor[2]
-        idx_bajo = mejor[3]
+        nuevo_bajo = acorde[idx_bajo]
         resto = acorde[:idx_bajo] + acorde[idx_bajo + 1:]
         resto.sort()
-        voicing = [nuevo_bajo] + resto
-        voicings.append(voicing)
+        voicings.append([nuevo_bajo] + resto)
         bajo_anterior = nuevo_bajo
+
     return voicings
 
 # Future voicing strategies for other modes can be added here
