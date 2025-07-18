@@ -171,40 +171,49 @@ def _siguiente_grupo(indice: int) -> int:
 
 
 def procesar_progresion_en_grupos(texto: str) -> List[Tuple[str, List[int]]]:
-    """Asigna las corcheas del patrón a los acordes de ``texto``.
+    """Asignar corcheas a los acordes usando ``PATRON_GRUPOS``.
 
-    Cada acorde recibe consecutivamente un grupo de ``PATRON_GRUPOS``.  Si un
-    grupo no cabe completo en el compás actual (8 corcheas), se divide y la parte
-    restante pasa al siguiente compás.  Devuelve una lista donde cada elemento es
-    ``(acorde, [indices])`` siendo ``indices`` la lista de corcheas (0-indexadas)
-    que corresponden al acorde.
+    El texto de la progresión se divide por barras ``|`` en segmentos.  Cada
+    segmento puede contener uno o dos acordes.  Si sólo hay un acorde, se le
+    asignan dos grupos consecutivos del patrón sumados.  Si hay dos acordes,
+    cada uno toma un grupo.  Los índices de corchea son absolutos y se asignan de
+    manera continua sin respetar límites de compás.
     """
 
-    # Extrae todos los acordes ignorando las barras "|".
-    tokens = [t for t in texto.replace("|", " ").split() if t]
+    segmentos = [s.strip() for s in texto.split("|") if s.strip()]
 
     resultado: List[Tuple[str, List[int]]] = []
     indice_patron = 0
     posicion = 0  # corchea actual
 
-    for acorde in tokens:
-        grupo = _siguiente_grupo(indice_patron)
-        indice_patron += 1
-        restante = grupo
-        indices: List[int] = []
+    for seg in segmentos:
+        acordes = [a for a in seg.split() if a]
+        if len(acordes) == 1:
+            g1 = _siguiente_grupo(indice_patron)
+            g2 = _siguiente_grupo(indice_patron + 1)
+            dur = g1 + g2
+            indices = list(range(posicion, posicion + dur))
+            resultado.append((acordes[0], indices))
+            posicion += dur
+            indice_patron += 2
+        elif len(acordes) == 2:
+            g1 = _siguiente_grupo(indice_patron)
+            indices1 = list(range(posicion, posicion + g1))
+            posicion += g1
+            indice_patron += 1
 
-        while restante > 0:
-            fin_compas = ((posicion // 8) + 1) * 8
-            disponible = fin_compas - posicion
-            usar = min(restante, disponible)
-            indices.extend(range(posicion, posicion + usar))
-            posicion += usar
-            restante -= usar
-            # Si se acabó el compás pero quedan corcheas por asignar, continuará
-            # en el siguiente compás en la siguiente iteración del while.
-        resultado.append((acorde, indices))
+            g2 = _siguiente_grupo(indice_patron)
+            indices2 = list(range(posicion, posicion + g2))
+            posicion += g2
+            indice_patron += 1
 
-    # Depuración: imprime la asignación final
+            resultado.append((acordes[0], indices1))
+            resultado.append((acordes[1], indices2))
+        else:
+            raise ValueError(
+                "Cada segmento debe contener uno o dos acordes: " f"{seg}"
+            )
+
     for acorde, idxs in resultado:
         print(f"{acorde}: {idxs}")
 
