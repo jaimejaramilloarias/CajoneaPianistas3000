@@ -70,22 +70,23 @@ def _ajustar_octava(pitch: int) -> int:
 
 
 def generar_voicings_enlazados_tradicional(progresion: List[str]) -> List[List[int]]:
-    """Generate four-note voicings applying simple voice leading.
+    """Generate linked four‑note voicings in the traditional style.
 
-    The notes of each chord are placed as close as possible to the previous
-    voicing so that the jump in the bass voice is minimal.  All notes are kept
-    within ``RANGO_MIN`` and ``RANGO_MAX`` and the resulting voicing is always
-    sorted from low to high.
+    The bass voice is **never** the root (interval ``0``) nor the third
+    (interval ``x``) of the chord.  Only the intervals ``y`` or ``z`` can be
+    placed in the lowest voice.  The chosen bass is the option (``y`` or ``z``)
+    closest to the previous bass note.  The rest of the chord tones are stacked
+    above in ascending order.
     """
 
-    from itertools import permutations
+    import pretty_midi
 
-    referencia = [55, 57, 60, 64]  # posiciones de las cuatro voces
+    referencia = [55, 57, 60, 64]  # default positions for the four voices
     voicings: List[List[int]] = []
     bajo_anterior = referencia[0]
 
     def ajustar(pc: int, target: int) -> int:
-        """Return ``pc`` adjusted in octaves near ``target`` within range."""
+        """Return ``pc`` adjusted near ``target`` within range."""
         pitch = target + ((pc - target) % 12)
         if abs(pitch - target) > abs(pitch - 12 - target):
             pitch -= 12
@@ -97,22 +98,44 @@ def generar_voicings_enlazados_tradicional(progresion: List[str]) -> List[List[i
 
     for nombre in progresion:
         root, suf = parsear_nombre_acorde(nombre)
-        pcs = [(root + i) % 12 for i in INTERVALOS_TRADICIONALES[suf]]
+        ints = INTERVALOS_TRADICIONALES[suf]
+        pcs = [(root + i) % 12 for i in ints]
 
-        mejor: List[int] | None = None
-        mejor_salto: int | None = None
+        # ------------------------------------------------------------------
+        # Elegir el bajo solamente entre las notas correspondientes a ``y``
+        # o ``z``.  La fundamental y la tercera nunca se usan en la voz baja.
+        # ------------------------------------------------------------------
+        pc_y, pc_z = pcs[2], pcs[3]
+        bajo_y = ajustar(pc_y, bajo_anterior)
+        bajo_z = ajustar(pc_z, bajo_anterior)
+        if abs(bajo_y - bajo_anterior) <= abs(bajo_z - bajo_anterior):
+            bajo = _ajustar_octava(bajo_y)
+            bajo_intervalo = "y"
+            restantes_pcs = [pcs[0], pcs[1], pc_z]
+        else:
+            bajo = _ajustar_octava(bajo_z)
+            bajo_intervalo = "z"
+            restantes_pcs = [pcs[0], pcs[1], pc_y]
 
-        for perm in permutations(pcs):
-            notas = [ajustar(pc, t) for pc, t in zip(perm, referencia)]
-            notas.sort()
-            salto = abs(notas[0] - bajo_anterior)
-            if mejor is None or salto < mejor_salto:
-                mejor = notas
-                mejor_salto = salto
+        notas_restantes: List[int] = []
+        for pc, ref in zip(restantes_pcs, referencia[1:]):
+            pitch = ajustar(pc, ref)
+            # Asegura que todas las notas queden por encima del bajo
+            while pitch <= bajo:
+                pitch += 12
+            pitch = _ajustar_octava(pitch)
+            while pitch <= bajo:
+                pitch += 12
+            notas_restantes.append(pitch)
 
-        assert mejor is not None
-        voicings.append(mejor)
-        bajo_anterior = mejor[0]
+        voicing = sorted([bajo] + notas_restantes)
+        voicings.append(voicing)
+        nombres = [pretty_midi.note_number_to_name(n) for n in voicing]
+        print(
+            f"{nombre}: {nombres} - bajo {pretty_midi.note_number_to_name(bajo)}"
+            f" ({bajo_intervalo})"
+        )
+        bajo_anterior = bajo
 
     return voicings
 
