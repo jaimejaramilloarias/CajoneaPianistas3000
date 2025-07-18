@@ -191,7 +191,7 @@ def _arm_doble_octava(notas: List[pretty_midi.Note]) -> List[pretty_midi.Note]:
 
 
 def _arm_por_parejas(
-    notas: List[pretty_midi.Note],
+    posiciones: List[dict],
     voicings: List[List[int]],
     asignaciones: List[Tuple[str, List[int]]],
     grid_seg: float,
@@ -199,47 +199,59 @@ def _arm_por_parejas(
     *,
     debug: bool = False,
 ) -> List[pretty_midi.Note]:
-    """Generate paired notes following the given voicing pattern.
+    """Generate notes in parallel motion (thirds or sixths).
 
-    ``salto`` indica cuántas posiciones se avanza dentro del voicing para
-    escoger la nota superior.  Un valor ``1`` genera terceras y ``2`` genera
-    sextas.  La función conserva la velocity y la posición rítmica de las
-    notas originales.
+    Each chord ``voicing`` is walked sequentially using the eighth-note
+    positions assigned to it.  ``salto`` determines the pairing pattern:
+    ``1`` produces thirds and ``2`` produces sixths.  The rhythmic
+    information (start, end and velocity) is taken from the reference
+    ``posiciones`` list.
     """
 
-    # Build a map from eighth index to voicing index for quick lookup
+    # Map each eighth index to the corresponding voicing/chord
     mapa: dict[int, int] = {}
     for i, (_, idxs) in enumerate(asignaciones):
         for ix in idxs:
             mapa[ix] = i
 
+    # Counter so each chord advances through its voicing in parallel
+    contadores: dict[int, int] = {}
+
     resultado: List[pretty_midi.Note] = []
-    for n in notas:
-        resultado.append(n)
-        corchea = int(round(n.start / grid_seg))
-        if corchea not in mapa or n.pitch == 0:
-            continue
-        voicing = sorted(voicings[mapa[corchea]])
-        try:
-            idx = voicing.index(n.pitch)
-        except ValueError:
-            # Si la nota no pertenece al voicing actual se ignora la duplicación
+    for pos in posiciones:
+        corchea = int(round(pos["start"] / grid_seg))
+        if corchea not in mapa:
             if debug:
-                print(f"Nota {n.pitch} no encontrada en voicing {voicing}")
+                print(f"Corchea {corchea}: silencio")
             continue
-        idx_superior = (idx + salto) % 4
-        pitch_superior = voicing[idx_superior] + 12
-        nota_sup = pretty_midi.Note(
-            velocity=n.velocity,
-            pitch=pitch_superior,
-            start=n.start,
-            end=n.end,
-        )
+
+        idx_voicing = mapa[corchea]
+        paso = contadores.get(idx_voicing, 0)
+        contadores[idx_voicing] = paso + 1
+
+        voicing = sorted(voicings[idx_voicing])
+
+        if salto == 1:  # terceras
+            principal = voicing[paso % 4]
+            agregada = voicing[(paso + 1) % 4] + 12
+        else:  # sextas
+            principal = voicing[(paso + 1) % 4]
+            agregada = voicing[paso % 4] + 12
+
+        for pitch in (principal, agregada):
+            resultado.append(
+                pretty_midi.Note(
+                    velocity=pos["velocity"],
+                    pitch=pitch,
+                    start=pos["start"],
+                    end=pos["end"],
+                )
+            )
+
         if debug:
             print(
-                f"Corchea {corchea}: baja {n.pitch}, alta {pitch_superior}"
+                f"Corchea {corchea}: paso {paso} -> {principal} / {agregada}"
             )
-        resultado.append(nota_sup)
 
     return resultado
 
@@ -306,36 +318,32 @@ def exportar_montuno(
         posiciones_base, total_dest_cor, total_cor_ref, grid
     )
 
-    nuevas_notas, _ = aplicar_voicings_a_referencia(
-        posiciones, voicings, asignaciones, grid, debug=debug
-    )
-
-    limite_cor = total_dest_cor
-    limite = limite_cor * grid
-    nuevas_notas = [n for n in nuevas_notas if n.start < limite]
-
-    # Añade una nota de duración cero para asegurar la duración total
-    if limite > 0:
-        nuevas_notas.append(
-            pretty_midi.Note(
-                velocity=1,
-                pitch=0,
-                start=max(0.0, limite - grid),
-                end=limite,
-            )
+    arm = (armonizacion or "").lower()
+    if arm in ("terceras", "sextas"):
+        salto = 1 if arm == "terceras" else 2
+        nuevas_notas = _arm_por_parejas(
+            posiciones, voicings, asignaciones, grid, salto, debug=debug
         )
+    else:
+        nuevas_notas, _ = aplicar_voicings_a_referencia(
+            posiciones, voicings, asignaciones, grid, debug=debug
+        )
+        limite_cor = total_dest_cor
+        limite = limite_cor * grid
+        nuevas_notas = [n for n in nuevas_notas if n.start < limite]
 
-    # --------------------------------------------------------------
-    # Apply harmonization
-    # --------------------------------------------------------------
-    if armonizacion:
-        arm = armonizacion.lower()
-        if arm in ("terceras", "sextas"):
-            salto = 1 if arm == "terceras" else 2
-            nuevas_notas = _arm_por_parejas(
-                nuevas_notas, voicings, asignaciones, grid, salto, debug=debug
+        # Añade una nota de duración cero para asegurar la duración total
+        if limite > 0:
+            nuevas_notas.append(
+                pretty_midi.Note(
+                    velocity=1,
+                    pitch=0,
+                    start=max(0.0, limite - grid),
+                    end=limite,
+                )
             )
-        else:
+
+        if arm:
             nuevas_notas = aplicar_armonizacion(nuevas_notas, armonizacion)
 
     pm_out = pretty_midi.PrettyMIDI(initial_tempo=bpm)
