@@ -1,0 +1,13 @@
+
+Haz lo siguiente:
+
+- Usa mi código como base para el modo tradicional, pero organiza el proyecto así:
+    - main.py: solo interfaz gráfica (puede ser PyQt5 o Tkinter), para seleccionar modo, escribir la progresión, elegir el MIDI de referencia y generar el archivo de salida
+    - modos.py: define los diferentes modos (empieza con tradicional)
+    - voicings.py: mueve aquí toda la lógica de voicings enlazados y el diccionario de intervalos
+    - midi_utils.py: funciones de lectura de MIDI, reemplazo de notas base, exportación
+- Que la UI sea simple: cuadro de texto multilinea para la progresión, selector de archivo midi, botón para generar y mostrar mensaje de estado
+- Que todo quede modular y fácil de extender para más modos en el futuro
+- Solo implementa el modo tradicional por ahora, pero deja comentarios para agregar más modos después
+
+Organiza y comenta el código para que sea claro, limpio y mantenible.
