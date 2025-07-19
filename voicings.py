@@ -2,6 +2,15 @@
 
 from typing import List, Tuple
 
+# ---------------------------------------------------------------------------
+# Pitch range limits for the generated voicings.  Notes are adjusted so that
+# they remain within this interval when building the linked voicings.
+# These limits should only affect the base voicings; harmonisation later on
+# (octaves, double octaves, tenths or sixths) may exceed ``RANGO_MAX``.
+# ---------------------------------------------------------------------------
+RANGO_MIN = 53  # F3
+RANGO_MAX = 67  # G4
+
 # ==========================================================================
 # Dictionaries for chord suffixes and note names
 # These are used to parse chord symbols and build chord voicings
@@ -57,7 +66,12 @@ def parsear_nombre_acorde(nombre: str) -> Tuple[int, str]:
 
 
 def _ajustar_octava(pitch: int) -> int:
-    """Return ``pitch`` unchanged (legacy helper)."""
+    """Confine ``pitch`` within ``RANGO_MIN`` .. ``RANGO_MAX`` by octaves."""
+
+    while pitch < RANGO_MIN:
+        pitch += 12
+    while pitch > RANGO_MAX:
+        pitch -= 12
     return pitch
 
 
