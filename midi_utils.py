@@ -265,17 +265,19 @@ def _arm_terceras_intervalos(
     *,
     debug: bool = False,
 ) -> List[pretty_midi.Note]:
-    """Generate thirds following different patterns for 7th and 6th chords.
+    """Generate fixed pairs of thirds for 7th and 6th chords.
 
-    For each chord the lower voice rotates through the four notes of its
-    voicing.  The upper voice depends on the chord type:
+    Each chord cycles through its four notes in the lower voice.  The
+    upper voice is picked exactly as specified:
 
     * Chords with a seventh: ``n1``/``n2+12`` → ``n2``/``n3+12`` →
       ``n3``/``n4+12`` → ``n4``/``(root+2)+12``.
     * Chords with a sixth:  ``n1``/``n2+12`` → ``n2``/``n3+12`` →
       ``n3``/``(root+11)+12`` → ``n4``/``n1+12``.
 
-    The reference velocity and timing are preserved.
+    No interval logic is applied beyond these formulas; the upper note is
+    not altered to fit any particular spacing.  Reference velocity and
+    timing are preserved.
     """
 
     # Map each eighth to the index of its chord/voicing
@@ -294,22 +296,12 @@ def _arm_terceras_intervalos(
     contadores: dict[int, int] = {}
     resultado: List[pretty_midi.Note] = []
 
-    def _a_decima(grave: int, aguda: int) -> int:
-        """Return ``aguda`` shifted by octaves so ``aguda - grave`` is 15 or 16."""
-
-        diff = aguda - grave
-        if diff in (15, 16):
-            return aguda
-        mod = diff % 12
-        if mod == 3:
-            objetivo = 15
-        elif mod == 4:
-            objetivo = 16
-        else:
-            # If the pair does not form a third, keep the pitch class as is
-            # and leave the interval untouched.
-            return aguda
-        return aguda + (objetivo - diff)
+    # ------------------------------------------------------------------
+    # No debe realizarse ningún cálculo interválico adicional.  Las notas
+    # superiores se generan exactamente según las duplas indicadas para
+    # acordes con séptima o con sexta, sin ajustar la octava ni buscar
+    # terceras de forma automática.
+    # ------------------------------------------------------------------
 
     for pos in posiciones:
         corchea = int(round(pos["start"] / grid_seg))
@@ -342,13 +334,10 @@ def _arm_terceras_intervalos(
                 (n3, n4 + 12),
                 (n4, root_pitch + 2 + 12),
             ]
-        # The pair of voices is chosen exactly as defined above.  Only the
-        # octave of the upper voice will be moved if the interval is not
-        # a perfect tenth.
-        par_original = parejas[paso % 4]
-        grave, aguda = par_original
-        aguda = _a_decima(grave, aguda)
-        par = (grave, aguda)
+        # Las duplas se toman tal cual de la secuencia anterior; no se
+        # ajusta la octava de la nota aguda ni se realiza ningún cálculo
+        # interválico adicional.
+        par = parejas[paso % 4]
         for p in par:
             resultado.append(
                 pretty_midi.Note(
