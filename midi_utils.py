@@ -271,7 +271,7 @@ def _arm_terceras_intervalos(
     *,
     debug: bool = False,
 ) -> List[pretty_midi.Note]:
-    """Harmonize in parallel thirds following fixed functional pairs.
+    """Harmonize in parallel tenths following fixed functional pairs.
 
     Before processing the MIDI positions each chord is analysed so every
     pitch can be labelled as fundamental, third, fifth, sixth or seventh.
@@ -282,7 +282,7 @@ def _arm_terceras_intervalos(
     * 3 → 5 (+12)
     * 5 → 7 (+12) or M7 (+12) on sixth chords
     * 6 or diminished 7 → F (+24)
-    * 7 → 9 (+12)
+    * 7 → 9 (+24)
 
     Velocity and timing from the reference are preserved verbatim.
     """
@@ -367,12 +367,12 @@ def _arm_terceras_intervalos(
         # Octave or double octave shifts are applied as required.
         # --------------------------------------------------------------
         agregada = target
-        if func == "6":
+        if func in ("6", "7"):
             agregada += 24
         else:
             agregada += 12
-            while agregada <= base:
-                agregada += 12
+        while agregada <= base:
+            agregada += 12
 
         if debug:
             print(
