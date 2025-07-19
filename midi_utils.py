@@ -519,6 +519,141 @@ _ARMONIZADORES = {
 }
 
 
+def generar_notas_mixtas(
+    posiciones: List[dict],
+    voicings: List[List[int]],
+    asignaciones: List[Tuple[str, List[int], str]],
+    grid_seg: float,
+    *,
+    debug: bool = False,
+) -> List[pretty_midi.Note]:
+    """Generate notes applying per-chord harmonisation.
+
+    ``asignaciones`` debe contener tuplas ``(acorde, indices, armonizacion)``.
+    """
+
+    mapa: dict[int, int] = {}
+    armonias: dict[int, str] = {}
+    for i, (_, idxs, arm) in enumerate(asignaciones):
+        for ix in idxs:
+            mapa[ix] = i
+        armonias[i] = (arm or "").lower()
+
+    info: list[dict] = []
+    for nombre, _, _ in asignaciones:
+        root_pc, suf = parsear_nombre_acorde(nombre)
+        ints = INTERVALOS_TRADICIONALES[suf]
+        is_sixth = suf.endswith("6") and "7" not in suf
+        is_dim7 = suf == "º7"
+        info.append(
+            {
+                "root_pc": root_pc,
+                "intervals": ints,
+                "is_sixth": is_sixth,
+                "is_dim7": is_dim7,
+            }
+        )
+
+    contadores: dict[int, int] = {}
+    resultado: List[pretty_midi.Note] = []
+
+    for pos in posiciones:
+        corchea = int(round(pos["start"] / grid_seg))
+        if corchea not in mapa:
+            if debug:
+                print(f"Corchea {corchea}: silencio")
+            continue
+
+        idx = mapa[corchea]
+        arm = armonias.get(idx, "")
+        paso = contadores.get(idx, 0)
+        contadores[idx] = paso + 1
+        voicing = sorted(voicings[idx])
+
+        if arm in ("décimas", "treceavas"):
+            datos = info[idx]
+            base = voicing[paso % 4]
+            root_pc = datos["root_pc"]
+            ints = datos["intervals"]
+            is_sixth = datos["is_sixth"]
+            is_dim7 = datos["is_dim7"]
+
+            pc = base % 12
+            if pc == (root_pc + ints[0]) % 12:
+                base_int = ints[0]
+                target_int = ints[1]
+                func = "F"
+            elif pc == (root_pc + ints[1]) % 12:
+                base_int = ints[1]
+                target_int = ints[2]
+                func = "3"
+            elif pc == (root_pc + ints[2]) % 12:
+                base_int = ints[2]
+                target_int = 11 if is_sixth else ints[3]
+                func = "5"
+            elif pc == (root_pc + ints[3]) % 12:
+                base_int = ints[3]
+                if is_sixth or is_dim7:
+                    target_int = ints[0]
+                    func = "6"
+                else:
+                    target_int = 2
+                    func = "7"
+            else:
+                base_int = pc
+                target_int = pc
+                func = "?"
+
+            diff = (target_int - base_int) + (24 if func in ("6", "7") else 12)
+            agregada = base + diff
+
+            if arm == "décimas":
+                notas = (base, agregada)
+            else:  # treceavas
+                notas = (base + 12, agregada - 24)
+
+            if debug:
+                print(
+                    f"Corchea {corchea}: paso {paso} -> {notas[0]} / {notas[1]}"
+                )
+            for pitch in notas:
+                resultado.append(
+                    pretty_midi.Note(
+                        velocity=pos["velocity"],
+                        pitch=pitch,
+                        start=pos["start"],
+                        end=pos["end"],
+                    )
+                )
+            continue
+
+        # Procesamiento estandar del voicing base
+        orden = NOTAS_BASE.index(pos["pitch"])
+        base_pitch = voicing[orden]
+
+        notas: List[int]
+        if arm == "octavas":
+            notas = [base_pitch, base_pitch + 12]
+        elif arm == "doble octava":
+            notas = []
+            if base_pitch > 0:
+                notas.extend([base_pitch - 12, base_pitch + 12])
+        else:
+            notas = [base_pitch]
+
+        for pitch in notas:
+            resultado.append(
+                pretty_midi.Note(
+                    velocity=pos["velocity"],
+                    pitch=pitch,
+                    start=pos["start"],
+                    end=pos["end"],
+                )
+            )
+
+    return resultado
+
+
 def aplicar_armonizacion(notas: List[pretty_midi.Note], opcion: str) -> List[pretty_midi.Note]:
     """Apply the selected harmonization option using ``_ARMONIZADORES``."""
 
@@ -582,7 +717,7 @@ def _cortar_notas_superpuestas(notas: List[pretty_midi.Note]) -> List[pretty_mid
 def exportar_montuno(
     midi_referencia_path: Path,
     voicings: List[List[int]],
-    asignaciones: List[Tuple[str, List[int]]],
+    asignaciones: List[Tuple[str, List[int], str]],
     num_compases: int,
     output_path: Path,
     armonizacion: str | None = None,
@@ -601,8 +736,8 @@ def exportar_montuno(
 
     if debug:
         print("Asignacion de acordes a corcheas:")
-        for acorde, idxs in asignaciones:
-            print(f"  {acorde}: {idxs}")
+        for acorde, idxs, arm in asignaciones:
+            print(f"  {acorde} ({arm}): {idxs}")
 
     total_dest_cor = num_compases * 8
     posiciones = construir_posiciones_secuenciales(
@@ -611,19 +746,9 @@ def exportar_montuno(
 
     limite = total_dest_cor * grid
 
-    arm = (armonizacion or "").lower()
-    if arm == "décimas":
-        nuevas_notas = _arm_decimas_intervalos(
-            posiciones, voicings, asignaciones, grid, debug=debug
-        )
-    elif arm == "treceavas":
-        nuevas_notas = _arm_treceavas_intervalos(
-            posiciones, voicings, asignaciones, grid, debug=debug
-        )
-    else:
-        nuevas_notas, _ = aplicar_voicings_a_referencia(
-            posiciones, voicings, asignaciones, grid, debug=debug
-        )
+    nuevas_notas = generar_notas_mixtas(
+        posiciones, voicings, asignaciones, grid, debug=debug
+    )
 
     # Avoid overlapping notes at the same pitch which can cause MIDI
     # artefacts by trimming preceding notes when necessary.
@@ -646,8 +771,6 @@ def exportar_montuno(
             )
         )
 
-    if arm and arm not in ("décimas", "treceavas"):
-        nuevas_notas = aplicar_armonizacion(nuevas_notas, armonizacion)
 
     pm_out = pretty_midi.PrettyMIDI(initial_tempo=bpm)
     inst_out = pretty_midi.Instrument(
@@ -693,7 +816,9 @@ def _siguiente_grupo(indice: int) -> int:
 
 
 
-def procesar_progresion_en_grupos(texto: str) -> Tuple[List[Tuple[str, List[int]]], int]:
+def procesar_progresion_en_grupos(
+    texto: str, armonizacion_default: str | None = None
+) -> Tuple[List[Tuple[str, List[int], str]], int]:
     """Asignar corcheas a los acordes usando ``_siguiente_grupo``.
 
     El texto de la progresión se divide por barras ``|`` en segmentos.  Cada
@@ -708,18 +833,48 @@ def procesar_progresion_en_grupos(texto: str) -> Tuple[List[Tuple[str, List[int]
     segmentos = [s.strip() for s in texto.split("|") if s.strip()]
     num_compases = len(segmentos)
 
-    resultado: List[Tuple[str, List[int]]] = []
+    resultado: List[Tuple[str, List[int], str]] = []
     indice_patron = 0
     posicion = 0  # corchea actual
 
+    arm_actual = (armonizacion_default or "").capitalize()
+
+    def procesar_token(token: str) -> tuple[str, str] | None:
+        """Return (chord, armonizacion) from ``token`` or ``None`` if token is
+        just a harmonization marker."""
+
+        import re
+
+        m = re.match(r"^\((8|10|13|15)\)(.*)$", token)
+        if m:
+            codigo, resto = m.groups()
+            arm_map = {
+                "8": "Octavas",
+                "15": "Doble octava",
+                "10": "Décimas",
+                "13": "Treceavas",
+            }
+            nonlocal arm_actual
+            arm_actual = arm_map[codigo]
+            if resto:
+                return resto, arm_actual
+            return None
+        return token, arm_actual
+
     for seg in segmentos:
-        acordes = [a for a in seg.split() if a]
+        tokens = [t for t in seg.split() if t]
+        acordes: list[tuple[str, str]] = []
+        for tok in tokens:
+            info = procesar_token(tok)
+            if info is not None:
+                acordes.append(info)
         if len(acordes) == 1:
             g1 = _siguiente_grupo(indice_patron)
             g2 = _siguiente_grupo(indice_patron + 1)
             dur = g1 + g2
             indices = list(range(posicion, posicion + dur))
-            resultado.append((acordes[0], indices))
+            nombre, arm = acordes[0]
+            resultado.append((nombre, indices, arm))
             posicion += dur
             indice_patron += 2
         elif len(acordes) == 2:
@@ -733,14 +888,18 @@ def procesar_progresion_en_grupos(texto: str) -> Tuple[List[Tuple[str, List[int]
             posicion += g2
             indice_patron += 1
 
-            resultado.append((acordes[0], indices1))
-            resultado.append((acordes[1], indices2))
+            (n1, a1), (n2, a2) = acordes
+            resultado.append((n1, indices1, a1))
+            resultado.append((n2, indices2, a2))
+        elif len(acordes) == 0:
+            # segment may only contain harmonization change
+            continue
         else:
             raise ValueError(
                 "Cada segmento debe contener uno o dos acordes: " f"{seg}"
             )
 
-    for acorde, idxs in resultado:
-        print(f"{acorde}: {idxs}")
+    for acorde, idxs, arm in resultado:
+        print(f"{acorde} ({arm}): {idxs}")
 
     return resultado, num_compases

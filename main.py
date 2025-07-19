@@ -8,7 +8,8 @@ import midi_utils
 from modos import MODOS_DISPONIBLES
 
 
-# Opciones de armonización disponibles
+# Opciones de armonización disponibles.  También se pueden alternar dentro
+# de la progresión escribiendo "(8)", "(15)", "(10)" o "(13)" antes del acorde.
 ARMONIZACIONES = ["Octavas", "Doble octava", "Décimas", "Treceavas"]
 
 # ---------------------------------------------------------------------------

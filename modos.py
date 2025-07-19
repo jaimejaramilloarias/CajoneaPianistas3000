@@ -25,8 +25,10 @@ def montuno_tradicional(
     ``armonizacion`` especifica la forma de duplicar las notas generadas. Por
     ahora solo se aplica la opción "Octavas".
     """
-    asignaciones, compases = procesar_progresion_en_grupos(progresion_texto)
-    acordes = [a for a, _ in asignaciones]
+    asignaciones, compases = procesar_progresion_en_grupos(
+        progresion_texto, armonizacion
+    )
+    acordes = [a for a, _, _ in asignaciones]
     voicings = generar_voicings_enlazados_tradicional(acordes)
     exportar_montuno(
         midi_ref,
