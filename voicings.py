@@ -32,6 +32,7 @@ INTERVALOS_TRADICIONALES = {
     'º∆':     [0, 3, 6, 11],    # 1 b3 b5 7
     'ø':      [0, 3, 6, 10],    # 1 b3 b5 b7
     '7(b5)':  [0, 4, 6, 10],    # 1 3 b5 b7
+    '7(b9)':  [0, 4, 7, 10, 13],  # 1 3 5 b7 b9
     '∆(b5)':  [0, 4, 6, 11],    # 1 3 b5 7
 }
 
@@ -58,7 +59,10 @@ def parsear_nombre_acorde(nombre: str) -> Tuple[int, str]:
     """Parse a chord name into root MIDI pitch class and suffix."""
     import re
 
-    m = re.match(r'^([A-G][b#]?)(m6|m7|m∆|m|6|7|∆sus4|∆sus2|∆|\+7|º7|º∆|ø|7sus4|7sus2|7\(b5\)|∆\(b5\))$', nombre)
+    m = re.match(
+        r'^([A-G][b#]?)(m6|m7|m∆|m|6|7|∆sus4|∆sus2|∆|\+7|º7|º∆|ø|7sus4|7sus2|7\(b5\)|7\(b9\)|∆\(b5\))$',
+        nombre,
+    )
     if not m:
         raise ValueError(f"Acorde no reconocido: {nombre}")
     root, suf = m.group(1), m.group(2)
