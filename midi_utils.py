@@ -454,24 +454,33 @@ def _arm_treceavas_intervalos(
         is_dim7 = datos["is_dim7"]
 
         pc = base % 12
+        func = None
         base_int = None
         if pc == (root_pc + ints[0]) % 12:
+            func = "F"
             base_int = ints[0]
             target_int = ints[1]
         elif pc == (root_pc + ints[1]) % 12:
+            func = "3"
             base_int = ints[1]
             target_int = ints[2]
         elif pc == (root_pc + ints[2]) % 12:
+            func = "5"
             base_int = ints[2]
             target_int = 11 if is_sixth else ints[3]
         elif pc == (root_pc + ints[3]) % 12:
             base_int = ints[3]
-            target_int = ints[0] if (is_sixth or is_dim7) else 2
+            if is_sixth or is_dim7:
+                func = "6"
+                target_int = ints[0]
+            else:
+                func = "7"
+                target_int = 2
         else:
             base_int = pc
             target_int = pc
 
-        diff = (target_int - base_int) + (24 if (is_sixth or is_dim7) else 12)
+        diff = (target_int - base_int) + (24 if func in ("6", "7") else 12)
         agregada = base + diff
 
         principal = base + 12
