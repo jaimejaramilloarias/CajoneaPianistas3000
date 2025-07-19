@@ -367,9 +367,12 @@ def _arm_decimas_intervalos(
                 target_int = ints[0]
             else:
                 func = "7"
-                # For chords 7(b9) the added note for the minor seventh
-                # is always the flat nine instead of the major nine.
-                target_int = ints[4] if suf == "7(b9)" else 2
+                # For chords with b9 the minor seventh always pairs
+                # with the flat nine instead of the major nine.
+                if suf in ("7(b9)", "+7(b9)", "7(b5)b9", "7sus4(b9)"):
+                    target_int = ints[4]
+                else:
+                    target_int = 2
         else:
             base_int = pc
             target_int = pc
@@ -381,6 +384,10 @@ def _arm_decimas_intervalos(
         # note is placed exactly ``diff`` semitones above ``base``.
         # --------------------------------------------------------------
         diff = (target_int - base_int) + (24 if func in ("6", "7") else 12)
+        # If the added note is a flat nine, force a minor tenth (15 semitones)
+        # above the principal voice even if this exceeds the usual range.
+        if func == "7" and target_int == 13:
+            diff = (target_int - base_int) + 12
         agregada = base + diff
 
         if debug:
@@ -486,14 +493,22 @@ def _arm_treceavas_intervalos(
                 target_int = ints[0]
             else:
                 func = "7"
-                # En acordes 7(b9) la séptima menor se empareja
+                # En acordes con b9 la séptima menor se empareja
                 # siempre con la novena bemol.
-                target_int = ints[4] if suf == "7(b9)" else 2
+                if suf in ("7(b9)", "+7(b9)", "7(b5)b9", "7sus4(b9)"):
+                    target_int = ints[4]
+                else:
+                    target_int = 2
         else:
             base_int = pc
             target_int = pc
 
         diff = (target_int - base_int) + (24 if func in ("6", "7") else 12)
+        # Si la nota agregada es la novena menor, se fuerza una décima menor
+        # (15 semitonos) por encima de la voz principal aunque se supere el
+        # registro habitual.
+        if func == "7" and target_int == 13:
+            diff = (target_int - base_int) + 12
         agregada = base + diff
 
         principal = base + 12
@@ -628,8 +643,11 @@ def generar_notas_mixtas(
                     target_int = ints[0]
                     func = "6"
                 else:
-                    # En acordes 7(b9) la séptima menor se asocia a la b9
-                    target_int = ints[4] if suf == "7(b9)" else 2
+                    # En acordes con b9 la séptima menor se asocia a la b9
+                    if suf in ("7(b9)", "+7(b9)", "7(b5)b9", "7sus4(b9)"):
+                        target_int = ints[4]
+                    else:
+                        target_int = 2
                     func = "7"
             else:
                 base_int = pc
@@ -637,6 +655,10 @@ def generar_notas_mixtas(
                 func = "?"
 
             diff = (target_int - base_int) + (24 if func in ("6", "7") else 12)
+            # For flat nine the interval is forced to a minor tenth (15 semitones)
+            # above the principal voice even if it breaks range limits.
+            if func == "7" and target_int == 13:
+                diff = (target_int - base_int) + 12
             agregada = base + diff
 
             if arm == "décimas":
