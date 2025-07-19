@@ -12,6 +12,12 @@ from modos import MODOS_DISPONIBLES
 # de la progresión escribiendo "(8)", "(15)", "(10)" o "(13)" antes del acorde.
 ARMONIZACIONES = ["Octavas", "Doble octava", "Décimas", "Treceavas"]
 
+# Variaciones disponibles para cada clave.  Para añadir más, simplemente
+# amplía esta lista (por ejemplo, ["A", "B", "C", "D", "E"]).  Asegúrate de
+# incluir los archivos MIDI correspondientes siguiendo el patrón
+# ``<prefijo>_<variacion>.mid`` dentro de ``reference_midi_loops``.
+VARIACIONES = ["A", "B", "C", "D"]
+
 # ---------------------------------------------------------------------------
 # Configuration of the available "claves".  Each entry defines the reference
 # MIDI file and the rhythmic pattern to use.  Add new claves here in the
@@ -31,18 +37,16 @@ CLAVES = {
 }
 
 # ---------------------------------------------------------------------------
-# Keep track of the next reference MIDI to use for each clave and
-# a global counter for the generated montunos.  This ensures that the
-# reference changes on every generation and that output files have
+# Global counter for the generated montunos so output files have
 # sequential names.
 # ---------------------------------------------------------------------------
-INDICES_MIDI = {clave: 0 for clave in CLAVES}
 CONTADOR_MONTUNO = 1
 
 
 def generar(
     status_var: StringVar,
     clave_var: StringVar,
+    variacion_var: StringVar,
     texto: Text,
     modo_combo: ttk.Combobox,
     armon_combo: ttk.Combobox,
@@ -59,18 +63,11 @@ def generar(
     midi_utils.PATRON_GRUPOS = midi_utils.PRIMER_BLOQUE + midi_utils.PATRON_REPETIDO * 3
 
     global CONTADOR_MONTUNO
-    midi_dir = Path("reference_midi_loops")
-    pattern = f"{cfg['midi_prefix']}_*.mid"
-    opciones = sorted(midi_dir.glob(pattern))
-    if not opciones:
-        status_var.set(f"No se encontraron archivos para {clave}")
+    variacion = variacion_var.get()
+    midi_ref = Path("reference_midi_loops") / f"{cfg['midi_prefix']}_{variacion}.mid"
+    if not midi_ref.exists():
+        status_var.set(f"No se encontró {midi_ref}")
         return
-
-    # Use a different reference MIDI each time by cycling through the
-    # available options for the selected clave.
-    idx = INDICES_MIDI.get(clave, 0) % len(opciones)
-    midi_ref = opciones[idx]
-    INDICES_MIDI[clave] = idx + 1
 
     # Output file stored on the user's desktop with a sequential name
     desktop = Path.home() / "Desktop"
@@ -104,13 +101,17 @@ def main():
     root.title("Generador de Montunos")
 
     clave_var = StringVar(value="Clave 2-3")
+    variacion_var = StringVar(value=VARIACIONES[0])
     midi_var = StringVar()
     status_var = StringVar()
 
-    def actualizar_clave() -> None:
-        """Update the reference MIDI label when the clave changes."""
+    def actualizar_midi() -> None:
+        """Update the reference MIDI label according to clave and variation."""
         cfg = CLAVES[clave_var.get()]
-        midi_var.set(f"reference_midi_loops/{cfg['midi_prefix']}_*.mid")
+        variacion = variacion_var.get()
+        midi_var.set(
+            f"reference_midi_loops/{cfg['midi_prefix']}_{variacion}.mid"
+        )
 
     Label(root, text="Progresión de acordes:").pack(anchor="w")
     texto = Text(root, width=40, height=4)
@@ -123,13 +124,23 @@ def main():
             text=nombre,
             variable=clave_var,
             value=nombre,
-            command=actualizar_clave,
+            command=actualizar_midi,
+        ).pack(anchor="w")
+
+    Label(root, text="Variaci\u00f3n:").pack(anchor="w")
+    for var in VARIACIONES:
+        Radiobutton(
+            root,
+            text=var,
+            variable=variacion_var,
+            value=var,
+            command=actualizar_midi,
         ).pack(anchor="w")
 
     Label(root, text="MIDI de referencia:").pack(anchor="w", pady=(5, 0))
     Label(root, textvariable=midi_var).pack(anchor="w")
 
-    actualizar_clave()
+    actualizar_midi()
 
     Label(root, text="Modo:").pack(anchor="w", pady=(10, 0))
     modo_combo = ttk.Combobox(root, values=list(MODOS_DISPONIBLES.keys()))
@@ -144,7 +155,14 @@ def main():
     Button(
         root,
         text="Generar",
-        command=lambda: generar(status_var, clave_var, texto, modo_combo, armon_combo),
+        command=lambda: generar(
+            status_var,
+            clave_var,
+            variacion_var,
+            texto,
+            modo_combo,
+            armon_combo,
+        ),
     ).pack(pady=10)
     Label(root, textvariable=status_var).pack(pady=(5, 0))
 
