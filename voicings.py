@@ -56,16 +56,8 @@ def parsear_nombre_acorde(nombre: str) -> Tuple[int, str]:
     return NOTAS[root], suf
 
 
-RANGO_MIN = 53  # F3
-RANGO_MAX = 67  # G4
-
-
 def _ajustar_octava(pitch: int) -> int:
-    """Move ``pitch`` by octaves so it falls inside ``RANGO_MIN``-``RANGO_MAX``."""
-    while pitch < RANGO_MIN:
-        pitch += 12
-    while pitch > RANGO_MAX:
-        pitch -= 12
+    """Return ``pitch`` unchanged (legacy helper)."""
     return pitch
 
 
@@ -86,13 +78,9 @@ def generar_voicings_enlazados_tradicional(progresion: List[str]) -> List[List[i
     bajo_anterior = referencia[0]
 
     def ajustar(pc: int, target: int) -> int:
-        """Return ``pc`` adjusted near ``target`` within range."""
+        """Return ``pc`` adjusted near ``target`` without range limits."""
         pitch = target + ((pc - target) % 12)
         if abs(pitch - target) > abs(pitch - 12 - target):
-            pitch -= 12
-        while pitch < RANGO_MIN:
-            pitch += 12
-        while pitch > RANGO_MAX:
             pitch -= 12
         return pitch
 

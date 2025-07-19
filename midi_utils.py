@@ -200,13 +200,13 @@ def _arm_por_parejas(
     *,
     debug: bool = False,
 ) -> List[pretty_midi.Note]:
-    """Generate notes in parallel motion (thirds or sixths).
+    """Generate notes in parallel motion (décimas or sixths).
 
     Each chord ``voicing`` is walked sequentially using the eighth-note
     positions assigned to it.  ``salto`` determines the pairing pattern:
-    ``1`` produces thirds and ``2`` produces sixths.  The rhythmic
-    information (start, end and velocity) is taken from the reference
-    ``posiciones`` list.
+    ``1`` produces décimas (third + octave) and ``2`` produces sixths.
+    The rhythmic information (start, end and velocity) is taken from the
+    reference ``posiciones`` list.
     """
 
     # Map each eighth index to the corresponding voicing/chord
@@ -232,7 +232,7 @@ def _arm_por_parejas(
 
         voicing = sorted(voicings[idx_voicing])
 
-        if salto == 1:  # terceras
+        if salto == 1:  # décimas
             principal = voicing[paso % 4]
             agregada = voicing[(paso + 1) % 4] + 12
         else:  # sextas
@@ -263,7 +263,7 @@ def _arm_por_parejas(
     return resultado
 
 
-def _arm_terceras_intervalos(
+def _arm_decimas_intervalos(
     posiciones: List[dict],
     voicings: List[List[int]],
     asignaciones: List[Tuple[str, List[int]]],
@@ -500,8 +500,8 @@ def exportar_montuno(
     limite = total_dest_cor * grid
 
     arm = (armonizacion or "").lower()
-    if arm == "terceras":
-        nuevas_notas = _arm_terceras_intervalos(
+    if arm == "décimas":
+        nuevas_notas = _arm_decimas_intervalos(
             posiciones, voicings, asignaciones, grid, debug=debug
         )
     elif arm == "sextas":
@@ -534,7 +534,7 @@ def exportar_montuno(
             )
         )
 
-    if arm and arm not in ("terceras", "sextas"):
+    if arm and arm not in ("décimas", "sextas"):
         nuevas_notas = aplicar_armonizacion(nuevas_notas, armonizacion)
 
     pm_out = pretty_midi.PrettyMIDI(initial_tempo=bpm)
