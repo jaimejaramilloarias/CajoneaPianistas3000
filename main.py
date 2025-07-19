@@ -2,7 +2,6 @@
 
 from pathlib import Path
 from tkinter import Tk, Text, Button, Label, StringVar, Radiobutton, ttk
-import random
 
 import midi_utils
 
@@ -31,6 +30,15 @@ CLAVES = {
     },
 }
 
+# ---------------------------------------------------------------------------
+# Keep track of the next reference MIDI to use for each clave and
+# a global counter for the generated montunos.  This ensures that the
+# reference changes on every generation and that output files have
+# sequential names.
+# ---------------------------------------------------------------------------
+INDICES_MIDI = {clave: 0 for clave in CLAVES}
+CONTADOR_MONTUNO = 1
+
 
 def generar(
     status_var: StringVar,
@@ -50,14 +58,25 @@ def generar(
     midi_utils.PATRON_REPETIDO = cfg["patron_repetido"]
     midi_utils.PATRON_GRUPOS = midi_utils.PRIMER_BLOQUE + midi_utils.PATRON_REPETIDO * 3
 
+    global CONTADOR_MONTUNO
     midi_dir = Path("reference_midi_loops")
     pattern = f"{cfg['midi_prefix']}_*.mid"
     opciones = sorted(midi_dir.glob(pattern))
     if not opciones:
         status_var.set(f"No se encontraron archivos para {clave}")
         return
-    midi_ref = random.choice(opciones)
-    output = midi_ref.with_stem(midi_ref.stem + "_montuno")
+
+    # Use a different reference MIDI each time by cycling through the
+    # available options for the selected clave.
+    idx = INDICES_MIDI.get(clave, 0) % len(opciones)
+    midi_ref = opciones[idx]
+    INDICES_MIDI[clave] = idx + 1
+
+    # Output file stored on the user's desktop with a sequential name
+    desktop = Path.home() / "Desktop"
+    desktop.mkdir(parents=True, exist_ok=True)
+    output = desktop / f"montuno_tradicional_clave_{CONTADOR_MONTUNO}.mid"
+    CONTADOR_MONTUNO += 1
 
     progresion_texto = texto.get("1.0", "end")
     progresion_texto = " ".join(progresion_texto.split())  # limpia espacios extra
