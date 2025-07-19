@@ -342,37 +342,39 @@ def _arm_decimas_intervalos(
         # --------------------------------------------------------------
         pc = base % 12
         func = None
+        base_int = None
         if pc == (root_pc + ints[0]) % 12:
             func = "F"
-            target = root_pc + ints[1]
+            base_int = ints[0]
+            target_int = ints[1]
         elif pc == (root_pc + ints[1]) % 12:
             func = "3"
-            target = root_pc + ints[2]
+            base_int = ints[1]
+            target_int = ints[2]
         elif pc == (root_pc + ints[2]) % 12:
             func = "5"
-            target = root_pc + (11 if is_sixth else ints[3])
+            base_int = ints[2]
+            target_int = 11 if is_sixth else ints[3]
         elif pc == (root_pc + ints[3]) % 12:
+            base_int = ints[3]
             if is_sixth or is_dim7:
                 func = "6"
-                target = root_pc  # fundamental
+                target_int = ints[0]
             else:
                 func = "7"
-                target = root_pc + 2
+                target_int = 2
         else:
-            # Should not happen with valid voicings
-            target = base
+            base_int = pc
+            target_int = pc
 
         # --------------------------------------------------------------
-        # Compute the upper note ensuring it sits above the principal.
-        # Octave or double octave shifts are applied as required.
+        # Compute the required interval (15 or 16 semitones) based on
+        # ``base_int`` and ``target_int``.  ``target_int`` is expected to be
+        # higher than ``base_int`` within the chord definition.  The added
+        # note is placed exactly ``diff`` semitones above ``base``.
         # --------------------------------------------------------------
-        agregada = target
-        if func in ("6", "7"):
-            agregada += 24
-        else:
-            agregada += 12
-        while agregada <= base:
-            agregada += 12
+        diff = (target_int - base_int) + (24 if func in ("6", "7") else 12)
+        agregada = base + diff
 
         if debug:
             print(
