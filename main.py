@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from tkinter import Tk, Text, Button, Label, StringVar, Radiobutton, ttk
+import random
 
 import midi_utils
 
@@ -19,12 +20,12 @@ ARMONIZACIONES = ["Octavas", "Doble octava", "Décimas", "Treceavas"]
 # ---------------------------------------------------------------------------
 CLAVES = {
     "Clave 2-3": {
-        "midi": "tradicional_2-3.mid",
+        "midi_prefix": "tradicional_2-3",
         "primer_bloque": [3, 4, 4, 3],
         "patron_repetido": [5, 4, 4, 3],
     },
     "Clave 3-2": {
-        "midi": "tradicional_3-2.mid",
+        "midi_prefix": "tradicional_3-2",
         "primer_bloque": [3, 3, 5, 4],
         "patron_repetido": [4, 3, 5, 4],
     },
@@ -49,7 +50,13 @@ def generar(
     midi_utils.PATRON_REPETIDO = cfg["patron_repetido"]
     midi_utils.PATRON_GRUPOS = midi_utils.PRIMER_BLOQUE + midi_utils.PATRON_REPETIDO * 3
 
-    midi_ref = Path(cfg["midi"])
+    midi_dir = Path("reference_midi_loops")
+    pattern = f"{cfg['midi_prefix']}_*.mid"
+    opciones = sorted(midi_dir.glob(pattern))
+    if not opciones:
+        status_var.set(f"No se encontraron archivos para {clave}")
+        return
+    midi_ref = random.choice(opciones)
     output = midi_ref.with_stem(midi_ref.stem + "_montuno")
 
     progresion_texto = texto.get("1.0", "end")
@@ -84,7 +91,7 @@ def main():
     def actualizar_clave() -> None:
         """Update the reference MIDI label when the clave changes."""
         cfg = CLAVES[clave_var.get()]
-        midi_var.set(cfg["midi"])
+        midi_var.set(f"reference_midi_loops/{cfg['midi_prefix']}_*.mid")
 
     Label(root, text="Progresión de acordes:").pack(anchor="w")
     texto = Text(root, width=40, height=4)
