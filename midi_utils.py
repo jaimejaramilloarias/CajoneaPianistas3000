@@ -239,6 +239,12 @@ def _arm_por_parejas(
             principal = voicing[(paso + 1) % 4]
             agregada = voicing[paso % 4] + 12
 
+        # Ensure the upper note never sits in the same octave as the
+        # principal voice.  This avoids "collapsed" intervals when the
+        # voicing spans less than an octave.
+        while agregada <= principal:
+            agregada += 12
+
         for pitch in (principal, agregada):
             resultado.append(
                 pretty_midi.Note(
@@ -440,6 +446,27 @@ def _recortar_notas_a_limite(
     return recortadas
 
 
+def _cortar_notas_superpuestas(notas: List[pretty_midi.Note]) -> List[pretty_midi.Note]:
+    """Shorten notes to avoid overlaps at the same pitch.
+
+    If two consecutive notes share the same ``pitch`` and the first note
+    extends beyond the start of the second, the first note is truncated so
+    that it ends exactly when the following one begins.  This prevents MIDI
+    artefacts caused by overlapping identical pitches.
+    """
+
+    agrupadas: dict[int, List[pretty_midi.Note]] = {}
+    for n in sorted(notas, key=lambda x: (x.pitch, x.start)):
+        lista = agrupadas.setdefault(n.pitch, [])
+        if lista and lista[-1].end > n.start:
+            lista[-1].end = n.start
+        lista.append(n)
+
+    resultado = [n for lst in agrupadas.values() for n in lst]
+    resultado.sort(key=lambda x: (x.start, x.pitch))
+    return resultado
+
+
 def exportar_montuno(
     midi_referencia_path: Path,
     voicings: List[List[int]],
@@ -485,6 +512,10 @@ def exportar_montuno(
         nuevas_notas, _ = aplicar_voicings_a_referencia(
             posiciones, voicings, asignaciones, grid, debug=debug
         )
+
+    # Avoid overlapping notes at the same pitch which can cause MIDI
+    # artefacts by trimming preceding notes when necessary.
+    nuevas_notas = _cortar_notas_superpuestas(nuevas_notas)
 
     # ------------------------------------------------------------------
     # Ajuste final de duracion: todas las notas se recortan para que
