@@ -265,43 +265,51 @@ def _arm_terceras_intervalos(
     *,
     debug: bool = False,
 ) -> List[pretty_midi.Note]:
-    """Generate fixed pairs of thirds for 7th and 6th chords.
+    """Harmonize in parallel thirds following fixed functional pairs.
 
-    Each chord cycles through its four notes in the lower voice.  The
-    upper voice is picked exactly as specified:
+    Before processing the MIDI positions each chord is analysed so every
+    pitch can be labelled as fundamental, third, fifth, sixth or seventh.
+    The added note is then obtained with the exact interval mandated by the
+    specification:
 
-    * Chords with a seventh: ``n1``/``n2+12`` → ``n2``/``n3+12`` →
-      ``n3``/``n4+12`` → ``n4``/``(root+2)+12``.
-    * Chords with a sixth:  ``n1``/``n2+12`` → ``n2``/``n3+12`` →
-      ``n3``/``(root+11)+12`` → ``n4``/``n1+12``.
+    * F → 3 (+12)
+    * 3 → 5 (+12)
+    * 5 → 7 (+12) or M7 (+12) on sixth chords
+    * 6 or diminished 7 → F (+24)
+    * 7 → 9 (+12)
 
-    No interval logic is applied beyond these formulas; the upper note is
-    not altered to fit any particular spacing.  Reference velocity and
-    timing are preserved.
+    Velocity and timing from the reference are preserved verbatim.
     """
 
-    # Map each eighth to the index of its chord/voicing
+    # ------------------------------------------------------------------
+    # Build a map from eighth index to voicing index and gather information
+    # about each chord so that every pitch can be classified by function.
+    # ``info`` stores the root pitch class, the four intervals of the chord
+    # and flags indicating whether it is a sixth chord or a diminished
+    # seventh.
+    # ------------------------------------------------------------------
     mapa: dict[int, int] = {}
     for i, (_, idxs) in enumerate(asignaciones):
         for ix in idxs:
             mapa[ix] = i
 
-    # Preprocess chord information so detection happens only once
-    info: list[tuple[int, bool]] = []  # (root pitch class, is_sixth)
+    info: list[dict] = []
     for nombre, _ in asignaciones:
         root_pc, suf = parsear_nombre_acorde(nombre)
+        ints = INTERVALOS_TRADICIONALES[suf]
         is_sixth = suf.endswith("6") and "7" not in suf
-        info.append((root_pc, is_sixth))
+        is_dim7 = suf == "º7"
+        info.append(
+            {
+                "root_pc": root_pc,
+                "intervals": ints,
+                "is_sixth": is_sixth,
+                "is_dim7": is_dim7,
+            }
+        )
 
     contadores: dict[int, int] = {}
     resultado: List[pretty_midi.Note] = []
-
-    # ------------------------------------------------------------------
-    # No debe realizarse ningún cálculo interválico adicional.  Las notas
-    # superiores se generan exactamente según las duplas indicadas para
-    # acordes con séptima o con sexta, sin ajustar la octava ni buscar
-    # terceras de forma automática.
-    # ------------------------------------------------------------------
 
     for pos in posiciones:
         corchea = int(round(pos["start"] / grid_seg))
@@ -314,43 +322,67 @@ def _arm_terceras_intervalos(
         paso = contadores.get(idx, 0)
         contadores[idx] = paso + 1
 
+        datos = info[idx]
         voicing = sorted(voicings[idx])
-        root_pc, is_sixth = info[idx]
+        base = voicing[paso % 4]
+        root_pc = datos["root_pc"]
+        ints = datos["intervals"]
+        is_sixth = datos["is_sixth"]
+        is_dim7 = datos["is_dim7"]
 
-        n1, n2, n3, n4 = voicing
-        root_pitch = root_pc + 60  # root around C4
-
-        if is_sixth:
-            parejas = [
-                (n1, n2 + 12),
-                (n2, n3 + 12),
-                (n3, root_pitch + 11 + 12),
-                (n4, n1 + 12),
-            ]
+        # --------------------------------------------------------------
+        # Identify the function of ``base`` comparing its pitch class
+        # against the intervals of the current chord.
+        # --------------------------------------------------------------
+        pc = base % 12
+        func = None
+        if pc == (root_pc + ints[0]) % 12:
+            func = "F"
+            target = root_pc + ints[1]
+        elif pc == (root_pc + ints[1]) % 12:
+            func = "3"
+            target = root_pc + ints[2]
+        elif pc == (root_pc + ints[2]) % 12:
+            func = "5"
+            target = root_pc + (11 if is_sixth else ints[3])
+        elif pc == (root_pc + ints[3]) % 12:
+            if is_sixth or is_dim7:
+                func = "6"
+                target = root_pc  # fundamental
+            else:
+                func = "7"
+                target = root_pc + 2
         else:
-            parejas = [
-                (n1, n2 + 12),
-                (n2, n3 + 12),
-                (n3, n4 + 12),
-                (n4, root_pitch + 2 + 12),
-            ]
-        # Las duplas se toman tal cual de la secuencia anterior; no se
-        # ajusta la octava de la nota aguda ni se realiza ningún cálculo
-        # interválico adicional.
-        par = parejas[paso % 4]
-        for p in par:
-            resultado.append(
-                pretty_midi.Note(
-                    velocity=pos["velocity"],
-                    pitch=p,
-                    start=pos["start"],
-                    end=pos["end"],
-                )
-            )
+            # Should not happen with valid voicings
+            target = base
+
+        # --------------------------------------------------------------
+        # Compute the upper note ensuring it sits above the principal.
+        # Octave or double octave shifts are applied as required.
+        # --------------------------------------------------------------
+        agregada = target
+        if func == "6":
+            agregada += 24
+        else:
+            agregada += 12
+            while agregada <= base:
+                agregada += 12
 
         if debug:
             print(
-                f"Corchea {corchea}: paso {paso} {asignaciones[idx][0]} -> {par[0]} / {par[1]}"
+                f"Corchea {corchea}: paso {paso} {asignaciones[idx][0]} "
+                f"{pretty_midi.note_number_to_name(base)} ({func}) -> "
+                f"{pretty_midi.note_number_to_name(agregada)}"
+            )
+
+        for pitch in (base, agregada):
+            resultado.append(
+                pretty_midi.Note(
+                    velocity=pos["velocity"],
+                    pitch=pitch,
+                    start=pos["start"],
+                    end=pos["end"],
+                )
             )
 
     return resultado
