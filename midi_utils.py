@@ -315,6 +315,9 @@ def _arm_decimas_intervalos(
         )
 
     contadores: dict[int, int] = {}
+    offsets: dict[int, int] = {}
+    bajo_anterior: int | None = None
+    arm_anterior: str | None = None
     resultado: List[pretty_midi.Note] = []
 
     for pos in posiciones:
@@ -519,6 +522,19 @@ _ARMONIZADORES = {
 }
 
 
+def _ajustar_salto(prev_pitch: int | None, pitch: int) -> int:
+    """Return ``pitch`` transposed by octaves so the leap from ``prev_pitch``
+    is less than an octave."""
+
+    if prev_pitch is None:
+        return pitch
+    while pitch - prev_pitch >= 12:
+        pitch -= 12
+    while prev_pitch - pitch >= 12:
+        pitch += 12
+    return pitch
+
+
 def generar_notas_mixtas(
     posiciones: List[dict],
     voicings: List[List[int]],
@@ -608,44 +624,50 @@ def generar_notas_mixtas(
             agregada = base + diff
 
             if arm == "décimas":
-                notas = (base, agregada)
+                notas = [base, agregada]
             else:  # treceavas
-                notas = (base + 12, agregada - 24)
-
-            if debug:
-                print(
-                    f"Corchea {corchea}: paso {paso} -> {notas[0]} / {notas[1]}"
-                )
-            for pitch in notas:
-                resultado.append(
-                    pretty_midi.Note(
-                        velocity=pos["velocity"],
-                        pitch=pitch,
-                        start=pos["start"],
-                        end=pos["end"],
-                    )
-                )
-            continue
-
-        # Procesamiento estandar del voicing base
-        orden = NOTAS_BASE.index(pos["pitch"])
-        base_pitch = voicing[orden]
-
-        notas: List[int]
-        if arm == "octavas":
-            notas = [base_pitch, base_pitch + 12]
-        elif arm == "doble octava":
-            notas = []
-            if base_pitch > 0:
-                notas.extend([base_pitch - 12, base_pitch + 12])
+                notas = [base + 12, agregada - 24]
         else:
-            notas = [base_pitch]
+            # Procesamiento estandar del voicing base
+            orden = NOTAS_BASE.index(pos["pitch"])
+            base_pitch = voicing[orden]
+
+            if arm == "octavas":
+                notas = [base_pitch, base_pitch + 12]
+            elif arm == "doble octava":
+                notas = []
+                if base_pitch > 0:
+                    notas.extend([base_pitch - 12, base_pitch + 12])
+            else:
+                notas = [base_pitch]
+
+        offset = offsets.get(idx, 0)
+        if paso == 0:
+            bajo = min(notas)
+            if arm != arm_anterior:
+                ajustado = _ajustar_salto(bajo_anterior, bajo)
+                offset = ajustado - bajo
+                offsets[idx] = offset
+                bajo_anterior = ajustado
+                arm_anterior = arm
+            else:
+                offsets[idx] = offset
+                bajo_anterior = bajo + offset
+                arm_anterior = arm
+        else:
+            offset = offsets.get(idx, 0)
+
+        if debug and paso == 0:
+            print(
+                f"Corchea {corchea}: paso {paso} -> "
+                f"{[p + offset for p in notas]}"
+            )
 
         for pitch in notas:
             resultado.append(
                 pretty_midi.Note(
                     velocity=pos["velocity"],
-                    pitch=pitch,
+                    pitch=pitch + offset,
                     start=pos["start"],
                     end=pos["end"],
                 )
