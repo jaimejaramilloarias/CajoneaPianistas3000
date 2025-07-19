@@ -435,6 +435,9 @@ def _arm_treceavas_intervalos(
         )
 
     contadores: dict[int, int] = {}
+    offsets: dict[int, int] = {}
+    bajo_anterior: int | None = None
+    arm_anterior: str | None = None
     resultado: List[pretty_midi.Note] = []
 
     for pos in posiciones:
