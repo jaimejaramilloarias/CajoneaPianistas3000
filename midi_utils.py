@@ -311,6 +311,7 @@ def _arm_decimas_intervalos(
                 "intervals": ints,
                 "is_sixth": is_sixth,
                 "is_dim7": is_dim7,
+                "suf": suf,
             }
         )
 
@@ -338,6 +339,7 @@ def _arm_decimas_intervalos(
         ints = datos["intervals"]
         is_sixth = datos["is_sixth"]
         is_dim7 = datos["is_dim7"]
+        suf = datos["suf"]
 
         # --------------------------------------------------------------
         # Identify the function of ``base`` comparing its pitch class
@@ -365,7 +367,9 @@ def _arm_decimas_intervalos(
                 target_int = ints[0]
             else:
                 func = "7"
-                target_int = 2
+                # For chords 7(b9) the added note for the minor seventh
+                # is always the flat nine instead of the major nine.
+                target_int = ints[4] if suf == "7(b9)" else 2
         else:
             base_int = pc
             target_int = pc
@@ -431,6 +435,7 @@ def _arm_treceavas_intervalos(
                 "intervals": ints,
                 "is_sixth": is_sixth,
                 "is_dim7": is_dim7,
+                "suf": suf,
             }
         )
 
@@ -481,7 +486,9 @@ def _arm_treceavas_intervalos(
                 target_int = ints[0]
             else:
                 func = "7"
-                target_int = 2
+                # En acordes 7(b9) la séptima menor se empareja
+                # siempre con la novena bemol.
+                target_int = ints[4] if suf == "7(b9)" else 2
         else:
             base_int = pc
             target_int = pc
@@ -570,6 +577,7 @@ def generar_notas_mixtas(
                 "intervals": ints,
                 "is_sixth": is_sixth,
                 "is_dim7": is_dim7,
+                "suf": suf,
             }
         )
 
@@ -599,6 +607,7 @@ def generar_notas_mixtas(
             ints = datos["intervals"]
             is_sixth = datos["is_sixth"]
             is_dim7 = datos["is_dim7"]
+            suf = datos["suf"]
 
             pc = base % 12
             if pc == (root_pc + ints[0]) % 12:
@@ -619,7 +628,8 @@ def generar_notas_mixtas(
                     target_int = ints[0]
                     func = "6"
                 else:
-                    target_int = 2
+                    # En acordes 7(b9) la séptima menor se asocia a la b9
+                    target_int = ints[4] if suf == "7(b9)" else 2
                     func = "7"
             else:
                 base_int = pc
