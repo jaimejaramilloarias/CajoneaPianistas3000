@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import List, Tuple
 import pretty_midi
-from voicings import parsear_nombre_acorde
+from voicings import parsear_nombre_acorde, INTERVALOS_TRADICIONALES
 
 # Baseline notes present in the reference MIDI to be replaced by generated voicings
 NOTAS_BASE = [55, 57, 60, 64]  # G3, A3, C4, E4
