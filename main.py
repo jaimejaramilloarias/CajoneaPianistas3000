@@ -9,7 +9,7 @@ from modos import MODOS_DISPONIBLES
 
 
 # Opciones de armonización disponibles
-ARMONIZACIONES = ["Octavas", "Doble octava", "Décimas", "Sextas"]
+ARMONIZACIONES = ["Octavas", "Doble octava", "Décimas", "Treceavas"]
 
 # ---------------------------------------------------------------------------
 # Configuration of the available "claves".  Each entry defines the reference
