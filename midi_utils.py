@@ -235,7 +235,7 @@ def _arm_por_parejas(
         if salto == 1:  # décimas
             principal = voicing[paso % 4]
             agregada = voicing[(paso + 1) % 4] + 12
-        else:  # sextas
+        else:  # antiguas sextas
             principal = voicing[(paso + 1) % 4]
             agregada = voicing[paso % 4] + 12
 
@@ -396,6 +396,107 @@ def _arm_decimas_intervalos(
     return resultado
 
 
+def _arm_treceavas_intervalos(
+    posiciones: List[dict],
+    voicings: List[List[int]],
+    asignaciones: List[Tuple[str, List[int]]],
+    grid_seg: float,
+    *,
+    debug: bool = False,
+) -> List[pretty_midi.Note]:
+    """Generate inverted tenths resulting in thirteenths below.
+
+    This uses the same functional logic as :func:`_arm_decimas_intervalos` but
+    the pair of voices is inverted: the principal note is raised an octave and
+    the added voice is placed a thirteenth (20 or 21 semitones) below it.
+    """
+
+    mapa: dict[int, int] = {}
+    for i, (_, idxs) in enumerate(asignaciones):
+        for ix in idxs:
+            mapa[ix] = i
+
+    info: list[dict] = []
+    for nombre, _ in asignaciones:
+        root_pc, suf = parsear_nombre_acorde(nombre)
+        ints = INTERVALOS_TRADICIONALES[suf]
+        is_sixth = suf.endswith("6") and "7" not in suf
+        is_dim7 = suf == "º7"
+        info.append(
+            {
+                "root_pc": root_pc,
+                "intervals": ints,
+                "is_sixth": is_sixth,
+                "is_dim7": is_dim7,
+            }
+        )
+
+    contadores: dict[int, int] = {}
+    resultado: List[pretty_midi.Note] = []
+
+    for pos in posiciones:
+        corchea = int(round(pos["start"] / grid_seg))
+        if corchea not in mapa:
+            if debug:
+                print(f"Corchea {corchea}: silencio")
+            continue
+
+        idx = mapa[corchea]
+        paso = contadores.get(idx, 0)
+        contadores[idx] = paso + 1
+
+        datos = info[idx]
+        voicing = sorted(voicings[idx])
+        base = voicing[paso % 4]
+        root_pc = datos["root_pc"]
+        ints = datos["intervals"]
+        is_sixth = datos["is_sixth"]
+        is_dim7 = datos["is_dim7"]
+
+        pc = base % 12
+        base_int = None
+        if pc == (root_pc + ints[0]) % 12:
+            base_int = ints[0]
+            target_int = ints[1]
+        elif pc == (root_pc + ints[1]) % 12:
+            base_int = ints[1]
+            target_int = ints[2]
+        elif pc == (root_pc + ints[2]) % 12:
+            base_int = ints[2]
+            target_int = 11 if is_sixth else ints[3]
+        elif pc == (root_pc + ints[3]) % 12:
+            base_int = ints[3]
+            target_int = ints[0] if (is_sixth or is_dim7) else 2
+        else:
+            base_int = pc
+            target_int = pc
+
+        diff = (target_int - base_int) + (24 if (is_sixth or is_dim7) else 12)
+        agregada = base + diff
+
+        principal = base + 12
+        inferior = agregada - 24
+
+        if debug:
+            print(
+                f"Corchea {corchea}: paso {paso} -> "
+                f"{pretty_midi.note_number_to_name(principal)} / "
+                f"{pretty_midi.note_number_to_name(inferior)}"
+            )
+
+        for pitch in (principal, inferior):
+            resultado.append(
+                pretty_midi.Note(
+                    velocity=pos["velocity"],
+                    pitch=pitch,
+                    start=pos["start"],
+                    end=pos["end"],
+                )
+            )
+
+    return resultado
+
+
 def _arm_noop(notas: List[pretty_midi.Note]) -> List[pretty_midi.Note]:
     """Placeholder for future harmonization types."""
 
@@ -506,9 +607,9 @@ def exportar_montuno(
         nuevas_notas = _arm_decimas_intervalos(
             posiciones, voicings, asignaciones, grid, debug=debug
         )
-    elif arm == "sextas":
-        nuevas_notas = _arm_por_parejas(
-            posiciones, voicings, asignaciones, grid, 2, debug=debug
+    elif arm == "treceavas":
+        nuevas_notas = _arm_treceavas_intervalos(
+            posiciones, voicings, asignaciones, grid, debug=debug
         )
     else:
         nuevas_notas, _ = aplicar_voicings_a_referencia(
@@ -536,7 +637,7 @@ def exportar_montuno(
             )
         )
 
-    if arm and arm not in ("décimas", "sextas"):
+    if arm and arm not in ("décimas", "treceavas"):
         nuevas_notas = aplicar_armonizacion(nuevas_notas, armonizacion)
 
     pm_out = pretty_midi.PrettyMIDI(initial_tempo=bpm)
